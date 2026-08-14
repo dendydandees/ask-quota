@@ -108,23 +108,25 @@ func TestLookupDoesNotHangOnAForkingSource(t *testing.T) {
 	// /bin/sh forks rather than execs, so `sleep` survives the kill.
 	quotaSource = []string{"/bin/sh", "-c", "sleep 60 & exit 0"}
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		if _, ok := Lookup("5h"); ok {
-			t.Error("a forking source reported success")
-		}
-	}()
+	// The result is carried back rather than asserted in the goroutine: on the
+	// failure path the goroutine outlives the test, and touching t from it would
+	// replace the real message with a harness error.
+	result := make(chan bool, 1)
+	go func() { _, ok := Lookup("5h"); result <- ok }()
 
 	select {
-	case <-done:
+	case ok := <-result:
+		if ok {
+			t.Error("a forking source reported success")
+		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("Lookup hung: the timeout does not cover a descendant holding stdout")
 	}
 }
 
-// A runaway source must not be read into memory without a ceiling.
-func TestLookupBoundsTheOutputItReads(t *testing.T) {
+// A runaway source must not keep the tool waiting. The ceiling itself is
+// asserted in capped_test.go — this only pins that Lookup returns at all.
+func TestLookupReturnsForAnEndlessSource(t *testing.T) {
 	original := quotaSource
 	t.Cleanup(func() { quotaSource = original })
 
@@ -133,16 +135,14 @@ func TestLookupBoundsTheOutputItReads(t *testing.T) {
 
 	quotaSource = []string{"/bin/sh", "-c", "exec yes '{\"providers\":[]}'"}
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		if _, ok := Lookup("5h"); ok {
-			t.Error("an endless source reported success")
-		}
-	}()
+	result := make(chan bool, 1)
+	go func() { _, ok := Lookup("5h"); result <- ok }()
 
 	select {
-	case <-done:
+	case ok := <-result:
+		if ok {
+			t.Error("an endless source reported success")
+		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("Lookup did not stop reading an endless source")
 	}

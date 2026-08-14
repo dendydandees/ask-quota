@@ -108,18 +108,30 @@ func claimOnce(sessions []Session) []Session {
 		return strings.Compare(a.File, b.File)
 	})
 
-	claimed := make(map[string]bool)
+	// Points at the copy being kept, so a later, more complete copy of a claimed
+	// message can replace it in place. kept never outgrows the array it reuses,
+	// so these pointers stay valid.
+	claimed := make(map[string]*Message)
 	out := sessions[:0]
 	for _, s := range sessions {
 		kept := s.Messages[:0]
 		for _, m := range s.Messages {
 			if m.ID != "" {
-				if claimed[m.ID] {
+				if prev, ok := claimed[m.ID]; ok {
+					// The session that saw it first still owns it; only the
+					// numbers are upgraded. An interrupted transcript holds a
+					// partial copy of its last turn and the resume replays it
+					// complete, so keeping the first copy would undercount.
+					if m.Usage.total() > prev.Usage.total() {
+						*prev = m
+					}
 					continue
 				}
-				claimed[m.ID] = true
 			}
 			kept = append(kept, m)
+			if m.ID != "" {
+				claimed[m.ID] = &kept[len(kept)-1]
+			}
 		}
 		if len(kept) > 0 {
 			s.Messages = kept
@@ -231,7 +243,10 @@ func readSession(path string, since time.Time) (Session, error) {
 // The real ceiling is higher than it reads: append overshoots by up to 2x, and
 // NumCPU files are read at once. At 8 MiB that is ~128 MiB on an 8-core box;
 // at 32 MiB it was over half a gigabyte.
-const maxLine = 8 << 20
+//
+// A variable so tests can shrink it: exercising the drain at 8 MiB would cost
+// ~100 MB of allocation per case.
+var maxLine = 8 << 20
 
 // readCappedLine returns the next line, or nil for a line past maxLine, having
 // consumed it either way. Dropping one oversized line keeps the rest of the
@@ -302,7 +317,7 @@ func readLine(line []byte, since time.Time, s *Session, seen map[string]int) {
 	// undercounts output by ~7.5%. The most complete copy is the true record.
 	if r.Message.ID != "" {
 		if i, ok := seen[r.Message.ID]; ok {
-			if msg.Usage.Output > s.Messages[i].Usage.Output {
+			if msg.Usage.total() > s.Messages[i].Usage.total() {
 				s.Messages[i] = msg
 			}
 			return
@@ -362,6 +377,13 @@ func promptText(content json.RawMessage) string {
 		}
 	}
 	return text
+}
+
+// total is every token a record accounts for. Streaming snapshots of the same
+// message grow in every field, so this decides which copy is the complete one
+// without privileging any single field.
+func (u Usage) total() int64 {
+	return u.Input + u.Output + u.CacheWrite + u.CacheRead
 }
 
 // Plus returns the sum of two usage records. Totalling usage is done wherever

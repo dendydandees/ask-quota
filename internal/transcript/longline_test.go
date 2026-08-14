@@ -16,7 +16,11 @@ func TestScanSurvivesAnOversizedLine(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now().UTC()
 
-	huge := strings.Repeat("x", 9*1024*1024)
+	restore := maxLine
+	maxLine = 4 << 10
+	t.Cleanup(func() { maxLine = restore })
+
+	huge := strings.Repeat("x", maxLine*2)
 	var b strings.Builder
 	fmt.Fprintf(&b, `{"type":"user","cwd":"/home/u/repo","timestamp":%q,"message":{"content":"real prompt"}}`+"\n",
 		now.Add(-2*time.Minute).Format(time.RFC3339Nano))
@@ -51,6 +55,10 @@ func TestScanSurvivesAnOversizedLine(t *testing.T) {
 func TestScanSkipsALineBeyondTheCap(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now().UTC()
+
+	restore := maxLine
+	maxLine = 4 << 10
+	t.Cleanup(func() { maxLine = restore })
 
 	var b strings.Builder
 	fmt.Fprintf(&b, `{"type":"user","cwd":"/home/u/repo","timestamp":%q,"message":{"content":"real prompt"}}`+"\n",

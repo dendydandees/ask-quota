@@ -164,10 +164,11 @@ a coin flip, since transcripts are named with UUIDs. The mtime signal degrades
 if the user later returns to the original transcript, which is the accepted
 limit of deciding this from the filesystem.
 
-Known bound: when a *later* file holds a more complete copy of an id the earlier
-session already claimed, the earlier session's copy stands. Measured at 0.019%
-of weekly output tokens — below the noise of the cost weighting itself, and not
-worth the cross-session bookkeeping it would take to close.
+Ownership and completeness are decided separately: the earlier session keeps the
+message, but a later file holding a more complete copy of it upgrades the
+numbers in place. An interrupted transcript holds a partial copy of its last
+turn and the resume replays that turn complete, so deciding both by "first
+session wins" would undercount exactly as keeping the first in-file copy did.
 
 ### Output
 
