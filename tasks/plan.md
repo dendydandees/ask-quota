@@ -64,10 +64,10 @@ transcript. Review before proceeding.
 
 - [x] Task 9: Performance verification on the real corpus — 531 files / 663 MB:
       `30d --top all` in 551–740ms against a 5s target, no code changed
-- [ ] Task 10: `--help` text and man page
-- [ ] Task 11: Release scaffolding
+- [x] Task 10: `--help` text and man page
+- [x] Task 11: Release scaffolding
 
-**Checkpoint C** — all nine Success Criteria in the spec are met.
+**Checkpoint C** ✅ — all nine Success Criteria in the spec are met.
 
 ## Parallelization
 
