@@ -91,9 +91,9 @@ func TestTableEmptyRowsPrintsNothing(t *testing.T) {
 func TestShortProjectKeepsTheTail(t *testing.T) {
 	cases := map[string]string{
 		"/home/u/orca/workspaces/monolith/feat-payment": "monolith/feat-payment",
-		"/home/u/project":                               "u/project",
-		"proj":                                          "proj",
-		"":                                              "",
+		"/home/u/project": "u/project",
+		"proj":            "proj",
+		"":                "",
 	}
 	for in, want := range cases {
 		if got := shortProject(in); got != want {
