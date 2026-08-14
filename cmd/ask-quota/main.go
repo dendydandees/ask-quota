@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"time"
 
 	"github.com/dendy-fisiohome/ask-quota/internal/cli"
@@ -16,8 +17,20 @@ import (
 	"github.com/dendy-fisiohome/ask-quota/internal/window"
 )
 
-// version is overridden at build time with -ldflags="-X main.version=...".
-var version = "dev"
+// version is set by the release build with -ldflags="-X main.version=...".
+// A `go install` never runs that, so the module version the toolchain recorded
+// stands in — otherwise every installed copy would report "dev".
+var version = ""
+
+func versionString() string {
+	if version != "" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
+		return info.Main.Version
+	}
+	return "dev"
+}
 
 func main() {
 	cfg, err := cli.Parse(os.Args[1:])
@@ -31,7 +44,7 @@ func main() {
 		fmt.Print(cli.Usage)
 		return
 	case cli.IntentVersion:
-		fmt.Printf("ask-quota %s\n", version)
+		fmt.Printf("ask-quota %s\n", versionString())
 		return
 	}
 

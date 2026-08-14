@@ -124,3 +124,20 @@ func TestWindowLineDistinguishesOfficialFromInferred(t *testing.T) {
 		t.Errorf("official line = %q, want the source and percentage named", got)
 	}
 }
+
+// A `go install` build never runs the release ldflags, so the version must come
+// from the module info the toolchain records rather than reporting "dev".
+func TestVersionFallsBackToBuildInfo(t *testing.T) {
+	original := version
+	t.Cleanup(func() { version = original })
+
+	version = "v1.2.3"
+	if got := versionString(); got != "v1.2.3" {
+		t.Errorf("versionString() = %q, want the injected version", got)
+	}
+
+	version = ""
+	if got := versionString(); got == "" {
+		t.Error("versionString() is empty without an injected version")
+	}
+}

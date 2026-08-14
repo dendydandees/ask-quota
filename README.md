@@ -23,10 +23,15 @@ merged.
 
 ## Install
 
-Download the binary from the releases page, or build it:
-
 ```sh
 go install github.com/dendy-fisiohome/ask-quota/cmd/ask-quota@latest
+```
+
+Or download a binary from the releases page and check it against the published
+`checksums.txt`:
+
+```sh
+sha256sum -c checksums.txt --ignore-missing
 ```
 
 From a clone, `make install` also places the man page under `~/.local/share/man`.

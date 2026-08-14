@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: lint
+        run: make lint
+      - name: test
+        run: go test -race ./...
+      # The project promises zero third-party modules; this is what keeps that
+      # promise honest rather than aspirational.
+      - name: no dependencies
+        run: |
+          test ! -f go.sum || { echo "go.sum exists: a dependency was added"; exit 1; }
+          test -z "$(go list -m all | tail -n +2)" || { echo "third-party modules present"; exit 1; }

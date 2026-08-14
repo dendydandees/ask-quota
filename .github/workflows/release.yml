@@ -1,0 +1,42 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # git describe needs the tags
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      # A tag is not a review: run the same gate as every other change before
+      # anything is published.
+      - name: lint
+        run: make lint
+      - name: test
+        run: go test -race ./...
+
+      - name: build
+        run: make dist
+
+      # With no dependencies, the published binary is the entire supply chain,
+      # so the checksums are the only thing a user can verify against.
+      - name: release
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            dist/ask-quota-linux-amd64 \
+            dist/ask-quota-linux-arm64 \
+            dist/checksums.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
