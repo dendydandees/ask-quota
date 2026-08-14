@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dendy-fisiohome/ask-quota/internal/cli"
-	"github.com/dendy-fisiohome/ask-quota/internal/quota"
-	"github.com/dendy-fisiohome/ask-quota/internal/window"
+	"github.com/dendydandees/ask-quota/internal/cli"
+	"github.com/dendydandees/ask-quota/internal/quota"
+	"github.com/dendydandees/ask-quota/internal/window"
 )
 
 // fakeHome writes a transcript with the given prompt and recent activity, and

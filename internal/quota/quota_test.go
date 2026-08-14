@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dendy-fisiohome/ask-quota/internal/window"
+	"github.com/dendydandees/ask-quota/internal/window"
 )
 
 // The quota source is optional by design. Every way it can go wrong must read

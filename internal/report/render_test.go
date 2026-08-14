@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dendy-fisiohome/ask-quota/internal/transcript"
+	"github.com/dendydandees/ask-quota/internal/transcript"
 )
 
 func TestRankSortsByCostDescending(t *testing.T) {

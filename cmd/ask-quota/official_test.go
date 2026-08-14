@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dendy-fisiohome/ask-quota/internal/cli"
+	"github.com/dendydandees/ask-quota/internal/cli"
 )
 
 // stubQuotaSource puts a quota source on PATH reporting the given percentage

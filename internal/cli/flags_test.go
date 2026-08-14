@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dendy-fisiohome/ask-quota/internal/window"
+	"github.com/dendydandees/ask-quota/internal/window"
 )
 
 func TestParseDefaults(t *testing.T) {

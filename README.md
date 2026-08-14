@@ -24,7 +24,7 @@ merged.
 ## Install
 
 ```sh
-go install github.com/dendy-fisiohome/ask-quota/cmd/ask-quota@latest
+go install github.com/dendydandees/ask-quota/cmd/ask-quota@latest
 ```
 
 Or download a binary from the releases page and check it against the published

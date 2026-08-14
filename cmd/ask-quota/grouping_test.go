@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dendy-fisiohome/ask-quota/internal/cli"
+	"github.com/dendydandees/ask-quota/internal/cli"
 )
 
 // writeSession adds one transcript under home for the given working directory.

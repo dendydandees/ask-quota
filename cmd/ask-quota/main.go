@@ -10,11 +10,11 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/dendy-fisiohome/ask-quota/internal/cli"
-	"github.com/dendy-fisiohome/ask-quota/internal/quota"
-	"github.com/dendy-fisiohome/ask-quota/internal/report"
-	"github.com/dendy-fisiohome/ask-quota/internal/transcript"
-	"github.com/dendy-fisiohome/ask-quota/internal/window"
+	"github.com/dendydandees/ask-quota/internal/cli"
+	"github.com/dendydandees/ask-quota/internal/quota"
+	"github.com/dendydandees/ask-quota/internal/report"
+	"github.com/dendydandees/ask-quota/internal/transcript"
+	"github.com/dendydandees/ask-quota/internal/window"
 )
 
 // version is set by the release build with -ldflags="-X main.version=...".

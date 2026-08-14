@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/dendy-fisiohome/ask-quota/internal/transcript"
+	"github.com/dendydandees/ask-quota/internal/transcript"
 )
 
 func TestCostAppliesPublishedWeights(t *testing.T) {

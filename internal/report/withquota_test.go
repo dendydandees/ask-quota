@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dendy-fisiohome/ask-quota/internal/transcript"
+	"github.com/dendydandees/ask-quota/internal/transcript"
 )
 
 // QUOTA is SHARE scaled by the official percentage: a row holding half the

@@ -4,7 +4,7 @@ package report
 import (
 	"strings"
 
-	"github.com/dendy-fisiohome/ask-quota/internal/transcript"
+	"github.com/dendydandees/ask-quota/internal/transcript"
 )
 
 // Weights are relative to an input token, following published price ratios.

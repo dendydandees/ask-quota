@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/dendy-fisiohome/ask-quota/internal/window"
+	"github.com/dendydandees/ask-quota/internal/window"
 )
 
 // Official is the upstream view of a quota window: when it resets and how much

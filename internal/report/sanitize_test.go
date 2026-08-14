@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dendy-fisiohome/ask-quota/internal/transcript"
+	"github.com/dendydandees/ask-quota/internal/transcript"
 )
 
 // Bytes and runes that let transcript text misrepresent itself on a terminal.
