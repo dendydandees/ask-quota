@@ -20,17 +20,41 @@ const (
 
 var groupings = []string{GroupSession, GroupProject}
 
+// Intent is what the command line asks for.
+type Intent int
+
+const (
+	IntentReport Intent = iota
+	IntentHelp
+	IntentVersion
+)
+
 // Config is a validated command line.
 type Config struct {
+	Intent  Intent
 	Window  string
 	Top     int // 0 means every row
 	GroupBy string
 	JSON    bool
 }
 
+// asksFor reports whether args contain a bare flag, wherever it appears.
+// Help and version are answered before anything else is validated: someone
+// asking how the tool works should not first be told they typed it wrong.
+func asksFor(args []string, names ...string) bool {
+	return slices.ContainsFunc(args, func(a string) bool { return slices.Contains(names, a) })
+}
+
 // Parse reads args, applies defaults, and validates. The returned error is
 // meant to be shown to the user as-is.
 func Parse(args []string) (Config, error) {
+	if asksFor(args, "--help", "-h", "help") {
+		return Config{Intent: IntentHelp}, nil
+	}
+	if asksFor(args, "--version", "-v") {
+		return Config{Intent: IntentVersion}, nil
+	}
+
 	// flag stops parsing at the first non-flag argument, so a leading window
 	// would swallow every flag after it. Take it off the front first.
 	var positional string

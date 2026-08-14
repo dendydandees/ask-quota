@@ -93,3 +93,43 @@ func TestParseErrorsListValidValues(t *testing.T) {
 		}
 	}
 }
+
+// --help and --version must work wherever they appear, including after the
+// positional window, which is a natural thing to type.
+func TestParseReportsHelpAndVersionAnywhere(t *testing.T) {
+	cases := []struct {
+		args []string
+		want Intent
+	}{
+		{nil, IntentReport},
+		{[]string{"--help"}, IntentHelp},
+		{[]string{"-h"}, IntentHelp},
+		{[]string{"week", "--help"}, IntentHelp},
+		{[]string{"--top", "3", "--help"}, IntentHelp},
+		{[]string{"--version"}, IntentVersion},
+		{[]string{"-v"}, IntentVersion},
+		{[]string{"30d", "--version"}, IntentVersion},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			got, err := Parse(tc.args)
+			if err != nil {
+				t.Fatalf("Parse(%v): %v", tc.args, err)
+			}
+			if got.Intent != tc.want {
+				t.Errorf("Parse(%v).Intent = %v, want %v", tc.args, got.Intent, tc.want)
+			}
+		})
+	}
+}
+
+// Help wins over a bad flag: the user asking for help is not an error.
+func TestParseHelpBeatsInvalidInput(t *testing.T) {
+	got, err := Parse([]string{"--top", "-3", "--help"})
+	if err != nil {
+		t.Fatalf("want help, got error: %v", err)
+	}
+	if got.Intent != IntentHelp {
+		t.Errorf("Intent = %v, want IntentHelp", got.Intent)
+	}
+}

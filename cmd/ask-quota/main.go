@@ -19,22 +19,21 @@ import (
 var version = "dev"
 
 func main() {
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "--version", "-v":
-			fmt.Printf("ask-quota %s\n", version)
-			return
-		case "--help", "-h", "help":
-			fmt.Print(cli.Usage)
-			return
-		}
-	}
-
 	cfg, err := cli.Parse(os.Args[1:])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ask-quota:", err)
 		os.Exit(2)
 	}
+
+	switch cfg.Intent {
+	case cli.IntentHelp:
+		fmt.Print(cli.Usage)
+		return
+	case cli.IntentVersion:
+		fmt.Printf("ask-quota %s\n", version)
+		return
+	}
+
 	if err := run(cfg, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "ask-quota:", err)
 		os.Exit(2)
@@ -73,7 +72,16 @@ func run(cfg cli.Config, w io.Writer) error {
 	got := <-quota
 	official, haveOfficial := got.official, got.ok
 
-	start, err := window.Resolve(cfg.Window, now, official.ResetsAt, transcript.Times(scanned))
+	// Activity timestamps are only consulted to infer a session block, which
+	// happens for one window and only without an official reset. Collecting
+	// them otherwise would allocate one entry per message across the corpus
+	// for a value the resolver never reads.
+	var times []time.Time
+	if cfg.Window == window.Session && !haveOfficial {
+		times = transcript.Times(scanned)
+	}
+
+	start, err := window.Resolve(cfg.Window, now, official.ResetsAt, times)
 	if err != nil {
 		return err
 	}
