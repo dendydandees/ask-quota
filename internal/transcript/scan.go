@@ -249,3 +249,14 @@ func promptText(content json.RawMessage) string {
 	}
 	return text
 }
+
+// Plus returns the sum of two usage records. Totalling usage is done wherever
+// records are folded together, so the arithmetic lives with the type.
+func (u Usage) Plus(o Usage) Usage {
+	return Usage{
+		Input:      u.Input + o.Input,
+		Output:     u.Output + o.Output,
+		CacheWrite: u.CacheWrite + o.CacheWrite,
+		CacheRead:  u.CacheRead + o.CacheRead,
+	}
+}

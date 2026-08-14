@@ -53,14 +53,10 @@ func run(cfg cli.Config, w io.Writer) error {
 	// QUOTA column is dropped, but nothing else changes. It runs alongside the
 	// scan so a slow lookup costs no wall clock — and so its timeout can be
 	// generous enough not to degrade on a cold start.
-	type lookup struct {
-		official quota.Official
-		ok       bool
-	}
-	pending := make(chan lookup, 1)
+	pending := make(chan quota.Official, 1)
 	go func() {
-		o, ok := quota.Lookup(cfg.Window)
-		pending <- lookup{o, ok}
+		o, _ := quota.Lookup(cfg.Window)
+		pending <- o
 	}()
 
 	// Scanned wider than the window: a session block is defined by the idle
@@ -70,8 +66,10 @@ func run(cfg cli.Config, w io.Writer) error {
 		return err
 	}
 
-	got := <-pending
-	official, haveOfficial := got.official, got.ok
+	// An absent source is the zero Official, which is exactly what the window
+	// resolver already treats as "no official boundary".
+	official := <-pending
+	haveOfficial := !official.ResetsAt.IsZero()
 
 	// Activity timestamps are only consulted to infer a session block, which
 	// happens for one window and only without an official reset. Collecting

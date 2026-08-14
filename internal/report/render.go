@@ -34,16 +34,19 @@ func Table(rows []Row, showQuota bool) string {
 		return ""
 	}
 
-	header := []string{"SHARE", "OUT", "CACHE_W", "CACHE_R", "PROJECT", "TASK"}
+	// Header and rows are built in the same shape, so the optional column
+	// cannot drift out of position between them.
+	header := []string{"SHARE"}
 	if showQuota {
-		header = append([]string{"SHARE", "QUOTA"}, header[1:]...)
+		header = append(header, "QUOTA")
 	}
+	header = append(header, "OUT", "CACHE_W", "CACHE_R", "PROJECT", "TASK")
 
 	grid := [][]string{header}
 	for _, r := range rows {
-		cells := []string{fmt.Sprintf("%.1f%%", r.Share)}
+		cells := []string{percent(r.Share)}
 		if showQuota {
-			cells = append(cells, fmt.Sprintf("%.1f%%", r.Quota))
+			cells = append(cells, percent(r.Quota))
 		}
 		grid = append(grid, append(cells,
 			tokens(r.Usage.Output),
@@ -108,6 +111,8 @@ func JSON(rows []Row) ([]byte, error) {
 	}
 	return json.Marshal(out)
 }
+
+func percent(v float64) string { return fmt.Sprintf("%.1f%%", v) }
 
 // tokens formats a token count compactly; exact counts do not aid comparison.
 func tokens(n int64) string {

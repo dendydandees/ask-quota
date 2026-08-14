@@ -44,10 +44,7 @@ func Summarize(sessions []transcript.Session) []Row {
 	for _, s := range sessions {
 		var u transcript.Usage
 		for _, m := range s.Messages {
-			u.Input += m.Usage.Input
-			u.Output += m.Usage.Output
-			u.CacheWrite += m.Usage.CacheWrite
-			u.CacheRead += m.Usage.CacheRead
+			u = u.Plus(m.Usage)
 		}
 		c := Cost(u)
 		total += c

@@ -89,11 +89,11 @@ func Parse(args []string) (Config, error) {
 		cfg.Window = positional
 	}
 
-	if !slices.Contains(window.Kinds, cfg.Window) {
-		return Config{}, fmt.Errorf("unknown window %q: want one of %v", cfg.Window, window.Kinds)
+	if err := oneOf("window", cfg.Window, window.Kinds); err != nil {
+		return Config{}, err
 	}
-	if !slices.Contains(groupings, cfg.GroupBy) {
-		return Config{}, fmt.Errorf("unknown --group-by %q: want one of %v", cfg.GroupBy, groupings)
+	if err := oneOf("--group-by", cfg.GroupBy, groupings); err != nil {
+		return Config{}, err
 	}
 
 	n, err := parseTop(*top)
@@ -103,6 +103,15 @@ func Parse(args []string) (Config, error) {
 	cfg.Top = n
 
 	return cfg, nil
+}
+
+// oneOf rejects a value outside allowed, naming the alternatives so the user
+// does not have to go looking for --help.
+func oneOf(name, value string, allowed []string) error {
+	if slices.Contains(allowed, value) {
+		return nil
+	}
+	return fmt.Errorf("unknown %s %q: want one of %v", name, value, allowed)
 }
 
 func parseTop(s string) (int, error) {
