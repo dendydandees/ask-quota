@@ -34,6 +34,9 @@ Or download a binary from the releases page and check it against the published
 sha256sum -c checksums.txt --ignore-missing
 ```
 
+Released binaries are static and reproducible: `make dist` at the same tag, on
+the pinned toolchain, produces the same bytes the release published.
+
 From a clone, `make install` also places the man page under `~/.local/share/man`.
 
 No runtime, no dependencies, nothing else to install: a single static binary,

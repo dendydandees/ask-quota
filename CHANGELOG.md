@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.1 — 2026-08-15
+
+### Fixed
+
+- Release binaries are built with `CGO_ENABLED=0`. A native build defaults to
+  cgo on, so the amd64 binary was dynamically linked against the host glibc
+  while the cross-compiled arm64 one was static — the README promised a static
+  binary either way, and the amd64 one could fail on musl or an older glibc.
+  Present since v0.1.0; found by diffing a published artifact against a local
+  build of the same tag. Builds are now byte-identical across machines.
+
 ## v0.2.0 — 2026-08-14
 
 ### Changed
