@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -76,7 +77,60 @@ func Scan(root string, since time.Time) ([]Session, error) {
 			out = append(out, s)
 		}
 	}
-	return out, nil
+	return claimOnce(out), nil
+}
+
+// claimOnce drops messages already counted by an earlier session.
+//
+// Resuming or compacting a conversation writes a fresh transcript that replays
+// earlier assistant turns with their original ids and timestamps, so per-file
+// deduplication is not enough: the copies land in the same window and would be
+// counted again. A message belongs to the session that saw it first, which puts
+// the usage on the conversation that originally incurred it and makes a pure
+// replay disappear rather than linger as a zero row.
+//
+// This runs after the scan's goroutines have joined, so it needs no lock.
+func claimOnce(sessions []Session) []Session {
+	slices.SortFunc(sessions, func(a, b Session) int {
+		if d := a.start().Compare(b.start()); d != 0 {
+			return d
+		}
+		// Two sessions can share a first timestamp; file path keeps the
+		// attribution stable rather than at the mercy of walk order.
+		return strings.Compare(a.File, b.File)
+	})
+
+	claimed := make(map[string]bool)
+	out := sessions[:0]
+	for _, s := range sessions {
+		kept := s.Messages[:0]
+		for _, m := range s.Messages {
+			if m.ID != "" {
+				if claimed[m.ID] {
+					continue
+				}
+				claimed[m.ID] = true
+			}
+			kept = append(kept, m)
+		}
+		if len(kept) > 0 {
+			s.Messages = kept
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// start is the session's earliest message, which orders sessions by when the
+// conversation began rather than by when its file was written.
+func (s Session) start() time.Time {
+	first := s.Messages[0].Time
+	for _, m := range s.Messages[1:] {
+		if m.Time.Before(first) {
+			first = m.Time
+		}
+	}
+	return first
 }
 
 // findTranscripts lists transcript files that could hold in-window messages.
@@ -130,7 +184,9 @@ func readSession(path string, since time.Time) (Session, error) {
 	defer f.Close()
 
 	s := Session{File: path}
-	seen := make(map[string]bool)
+	// id -> index in s.Messages, so a later, more complete copy can replace an
+	// earlier partial one.
+	seen := make(map[string]int)
 
 	// A Scanner would be simpler, but it stops dead on a line larger than its
 	// buffer and takes the rest of the file with it. Transcripts can carry a
@@ -150,7 +206,7 @@ func readSession(path string, since time.Time) (Session, error) {
 }
 
 // readLine folds one transcript line into s.
-func readLine(line []byte, since time.Time, s *Session, seen map[string]bool) {
+func readLine(line []byte, since time.Time, s *Session, seen map[string]int) {
 	// Most lines are user turns and tool results. Rejecting them on a
 	// substring before unmarshalling avoids the dominant cost, and matching on
 	// []byte directly avoids copying the line to do it.
@@ -175,18 +231,10 @@ func readLine(line []byte, since time.Time, s *Session, seen map[string]bool) {
 	if r.Message.Usage == nil || r.Type != "assistant" || r.Timestamp.Before(since) {
 		return
 	}
-	// Every assistant message is written ~3x per transcript; counting each copy
-	// would inflate every number in the tool by ~3x.
-	if r.Message.ID != "" {
-		if seen[r.Message.ID] {
-			return
-		}
-		seen[r.Message.ID] = true
-	}
 	if s.CWD == "" {
 		s.CWD = r.CWD
 	}
-	s.Messages = append(s.Messages, Message{
+	msg := Message{
 		ID:   r.Message.ID,
 		Time: r.Timestamp,
 		Usage: Usage{
@@ -195,7 +243,22 @@ func readLine(line []byte, since time.Time, s *Session, seen map[string]bool) {
 			CacheWrite: r.Message.Usage.CacheWrite,
 			CacheRead:  r.Message.Usage.CacheRead,
 		},
-	})
+	}
+
+	// Every assistant message is written ~3x per transcript, and the copies are
+	// streaming snapshots rather than repeats: the first is written before the
+	// turn has finished. Counting all three inflates ~3x; keeping the first
+	// undercounts output by ~7.5%. The most complete copy is the true record.
+	if r.Message.ID != "" {
+		if i, ok := seen[r.Message.ID]; ok {
+			if msg.Usage.Output > s.Messages[i].Usage.Output {
+				s.Messages[i] = msg
+			}
+			return
+		}
+		seen[r.Message.ID] = len(s.Messages)
+	}
+	s.Messages = append(s.Messages, msg)
 }
 
 // usageKey is the marker that tells a quota-consuming line from the rest.

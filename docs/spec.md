@@ -144,12 +144,23 @@ window. Measured on a real corpus of 534 files: 926 ids appear in more than one
 file, inflating the 30-day report by 6.1% and the weekly one by 2.4% — and in
 one case a whole row was a strict subset of another, making it entirely phantom.
 
+The three copies are **streaming snapshots, not repeats**: the first is written
+before the turn has finished. Measured on the same corpus, 1936 ids carry copies
+that disagree, and keeping the first undercounts output by 7.5%. The most
+complete copy is the true record, so a later copy reporting more output replaces
+an earlier one.
+
 **A message belongs to the session that saw it first.** Sessions are ordered by
 their earliest message, and a later session that replays an id does not count it
 again. A session left with no messages of its own disappears from the report
 rather than showing as a zero row. Ordering by first message rather than by walk
 order is what makes the attribution deterministic and puts the usage on the
 conversation that originally incurred it.
+
+Known bound: when a *later* file holds a more complete copy of an id the earlier
+session already claimed, the earlier session's copy stands. Measured at 0.019%
+of weekly output tokens — below the noise of the cost weighting itself, and not
+worth the cross-session bookkeeping it would take to close.
 
 ### Output
 
