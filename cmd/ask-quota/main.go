@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dendy-fisiohome/ask-quota/internal/cli"
+	"github.com/dendy-fisiohome/ask-quota/internal/quota"
 	"github.com/dendy-fisiohome/ask-quota/internal/report"
 	"github.com/dendy-fisiohome/ask-quota/internal/transcript"
 	"github.com/dendy-fisiohome/ask-quota/internal/window"
@@ -53,13 +54,13 @@ func run(cfg cli.Config, w io.Writer) error {
 	// scan so a slow lookup costs no wall clock — and so its timeout can be
 	// generous enough not to degrade on a cold start.
 	type lookup struct {
-		official report.Official
+		official quota.Official
 		ok       bool
 	}
-	quota := make(chan lookup, 1)
+	pending := make(chan lookup, 1)
 	go func() {
-		o, ok := report.LookupOfficial(cfg.Window)
-		quota <- lookup{o, ok}
+		o, ok := quota.Lookup(cfg.Window)
+		pending <- lookup{o, ok}
 	}()
 
 	// Scanned wider than the window: a session block is defined by the idle
@@ -69,7 +70,7 @@ func run(cfg cli.Config, w io.Writer) error {
 		return err
 	}
 
-	got := <-quota
+	got := <-pending
 	official, haveOfficial := got.official, got.ok
 
 	// Activity timestamps are only consulted to infer a session block, which
@@ -118,7 +119,7 @@ func run(cfg cli.Config, w io.Writer) error {
 
 // windowLine says which window the numbers cover and whether its boundary came
 // from the quota source or was inferred locally.
-func windowLine(kind string, start time.Time, official report.Official, haveOfficial bool) string {
+func windowLine(kind string, start time.Time, official quota.Official, haveOfficial bool) string {
 	origin := "inferred"
 	used := ""
 	if haveOfficial {

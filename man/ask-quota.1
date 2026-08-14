@@ -97,6 +97,11 @@ breakdown of local work, not necessarily of everything the account consumed.
 .PP
 The cost weight ignores per-model price differences, so rows are ranked
 consistently but not priced.
+.PP
+Output carries the first prompt of each session verbatim, and
+.B \-\-json
+adds the transcript path. Piping that elsewhere sends your own prompt text
+with it.
 .SH FILES
 .TP
 .I ~/.claude/projects

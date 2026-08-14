@@ -1,4 +1,5 @@
-package report
+// Package quota reads the optional external view of a quota window.
+package quota
 
 import (
 	"context"
@@ -28,10 +29,10 @@ var officialWindowID = map[string]string{
 // scale them to the real window.
 var quotaSource = []string{"quota-axi", "--provider", "claude", "--json"}
 
-// LookupOfficial asks the optional quota source about a window. A missing,
+// Lookup asks the optional quota source about a window. A missing,
 // failing or slow source is simply absent: it must never turn into an error
 // the user has to deal with.
-func LookupOfficial(kind string) (Official, bool) {
+func Lookup(kind string) (Official, bool) {
 	if _, ok := officialWindowID[kind]; !ok {
 		return Official{}, false
 	}
@@ -43,10 +44,10 @@ func LookupOfficial(kind string) (Official, bool) {
 	if err != nil {
 		return Official{}, false
 	}
-	return parseOfficial(out, kind)
+	return parse(out, kind)
 }
 
-func parseOfficial(data []byte, kind string) (Official, bool) {
+func parse(data []byte, kind string) (Official, bool) {
 	id, ok := officialWindowID[kind]
 	if !ok {
 		return Official{}, false
@@ -78,14 +79,4 @@ func parseOfficial(data []byte, kind string) (Official, bool) {
 		}
 	}
 	return Official{}, false
-}
-
-// WithQuota fills in each row's estimated share of the real quota window.
-func WithQuota(rows []Row, percentUsed float64) []Row {
-	out := make([]Row, len(rows))
-	copy(out, rows)
-	for i := range out {
-		out[i].Quota = out[i].Share * percentUsed / 100
-	}
-	return out
 }

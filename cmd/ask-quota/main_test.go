@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/dendy-fisiohome/ask-quota/internal/cli"
-	"github.com/dendy-fisiohome/ask-quota/internal/report"
+	"github.com/dendy-fisiohome/ask-quota/internal/quota"
 	"github.com/dendy-fisiohome/ask-quota/internal/window"
 )
 
@@ -114,12 +114,12 @@ func TestRunReportsAnEmptyWindowWithoutFailing(t *testing.T) {
 func TestWindowLineDistinguishesOfficialFromInferred(t *testing.T) {
 	start := time.Date(2026, 8, 14, 9, 20, 0, 0, time.UTC)
 
-	inferred := windowLine(window.Session, start, report.Official{}, false)
+	inferred := windowLine(window.Session, start, quota.Official{}, false)
 	if !strings.Contains(inferred, "inferred") || strings.Contains(inferred, "used") {
 		t.Errorf("inferred line = %q, want it marked inferred with no percentage", inferred)
 	}
 
-	got := windowLine(window.Week, start, report.Official{PercentUsed: 58}, true)
+	got := windowLine(window.Week, start, quota.Official{PercentUsed: 58}, true)
 	if !strings.Contains(got, "official") || !strings.Contains(got, "58% used") {
 		t.Errorf("official line = %q, want the source and percentage named", got)
 	}

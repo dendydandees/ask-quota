@@ -62,6 +62,7 @@ internal/cli/help.go        → --help text (kept in sync with the man page)
 internal/window/window.go   → resolve a window to an absolute start instant
 internal/window/infer.go    → block-start inference from activity gaps
 internal/transcript/scan.go → discover files, parse lines, emit sessions
+internal/quota/quota.go     → optional external lookup of the official window
 internal/report/cost.go     → token weighting, share/quota percentages
 internal/report/group.go    → session and project grouping
 internal/report/render.go   → table and JSON output
@@ -213,7 +214,8 @@ need none.
 
 ## Boundaries
 
-- **Always:** run `go test ./...` before committing; keep `--help` and the man
+- **Always:** keep `internal/` free of I/O except `internal/quota`, whose whole
+  job is the external lookup; run `go test ./...` before committing; keep `--help` and the man
   page in sync; state the local-only limitation in user-facing docs.
 - **Ask first:** adding any third-party module; cutting a release; adding a
   second provider; changing the cost weights.

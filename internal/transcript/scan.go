@@ -53,10 +53,12 @@ func Scan(root string, since time.Time) ([]Session, error) {
 	sem := make(chan struct{}, runtime.NumCPU())
 
 	for i, path := range files {
+		// Acquired before the goroutine exists, so the number of files bounds
+		// the work in flight rather than the number of goroutines alive.
+		sem <- struct{}{}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			sem <- struct{}{}
 			defer func() { <-sem }()
 
 			// A file we cannot read is skipped, not fatal: one unreadable
@@ -83,6 +85,8 @@ func Scan(root string, since time.Time) ([]Session, error) {
 // 30-day mode fast.
 func findTranscripts(root string, since time.Time) ([]string, error) {
 	var files []string
+	// A directory that cannot be walked is skipped rather than fatal, which
+	// also covers a missing root: the report is simply empty.
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -97,9 +101,6 @@ func findTranscripts(root string, since time.Time) ([]string, error) {
 		files = append(files, path)
 		return nil
 	})
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
 	return files, err
 }
 
