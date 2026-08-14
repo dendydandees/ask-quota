@@ -8,8 +8,8 @@ read from local Claude Code transcripts.
 Existing tools report *how much is left* (a single percentage). None report
 *what consumed it*. `ask-quota` fills that gap.
 
-- **User:** any Claude Code user, installed from npm.
-- **Success:** on a machine with nothing installed but Node and Claude Code,
+- **User:** any Claude Code user on Linux, installed as a single binary.
+- **Success:** on a machine with nothing installed but Claude Code,
   `ask-quota` with no flags prints a correct, useful answer.
 - **Non-goal:** replacing quota-reporting tools. `ask-quota` explains
   composition, not remaining balance.
