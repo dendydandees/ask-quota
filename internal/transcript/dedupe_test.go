@@ -157,3 +157,40 @@ func TestScanKeepsTheCompleteCopyOfARepeatedMessage(t *testing.T) {
 		t.Errorf("CacheRead = %d, want 3780 — the whole record must come from the same copy", got.CacheRead)
 	}
 }
+
+// A resume replays the original's turns with their original timestamps, so both
+// sessions report the same first message. Claude Code names transcripts with
+// UUIDs, so breaking that tie on the filename decides attribution by coin flip.
+// The original file was written first, so its mtime decides it meaningfully.
+func TestScanBreaksTiesOnFileAgeNotName(t *testing.T) {
+	base := time.Now().UTC().Add(-time.Hour)
+
+	// Same fixture twice, with the names swapped: attribution must not follow.
+	for _, names := range [][2]string{{"zzz-original", "aaa-resumed"}, {"aaa-original", "zzz-resumed"}} {
+		dir := t.TempDir()
+		original, resumed := names[0], names[1]
+
+		// Identical first message, so start() ties and only mtime separates them.
+		writeTranscript(t, dir, original, "the original", base, "shared", "own-a")
+		writeTranscript(t, dir, resumed, "the resume", base, "shared", "own-b")
+
+		older := time.Now().Add(-2 * time.Hour)
+		if err := os.Chtimes(filepath.Join(dir, original+".jsonl"), older, older); err != nil {
+			t.Fatal(err)
+		}
+
+		sessions, err := Scan(dir, base.Add(-time.Hour))
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+
+		for _, s := range sessions {
+			if s.Label == "the original" && len(s.Messages) != 2 {
+				t.Errorf("%v: original kept %d messages, want 2 (it owns the shared id)", names, len(s.Messages))
+			}
+			if s.Label == "the resume" && len(s.Messages) != 1 {
+				t.Errorf("%v: resume kept %d messages, want 1 (only its own)", names, len(s.Messages))
+			}
+		}
+	}
+}

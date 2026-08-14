@@ -84,7 +84,7 @@ Window start resolution, in order:
 
 | Window | With a quota source available | Standalone fallback |
 |---|---|---|
-| `5h` | official reset minus 5h | **infer**: start of the current activity block — the most recent message preceded by a gap > 5h |
+| `5h` | official reset minus 5h | **infer**: start of the current activity block. A block opens on a message and closes five hours later; if the last one has closed, no block is open and the window is empty until the next message starts one |
 | `week` | official reset minus 7d | rolling: now minus 7d |
 | `30d` | n/a — no official 30d window exists | rolling: now minus 30d |
 
@@ -156,6 +156,13 @@ again. A session left with no messages of its own disappears from the report
 rather than showing as a zero row. Ordering by first message rather than by walk
 order is what makes the attribution deterministic and puts the usage on the
 conversation that originally incurred it.
+
+A resume usually replays the original's earliest in-window message, so the two
+sessions tie on that key. The tie is broken on the file's modification time —
+the original was written first — and only then on path. Filename alone would be
+a coin flip, since transcripts are named with UUIDs. The mtime signal degrades
+if the user later returns to the original transcript, which is the accepted
+limit of deciding this from the filesystem.
 
 Known bound: when a *later* file holds a more complete copy of an id the earlier
 session already claimed, the earlier session's copy stands. Measured at 0.019%

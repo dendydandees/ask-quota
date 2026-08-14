@@ -37,6 +37,7 @@ type Session struct {
 	File     string
 	CWD      string
 	Label    string
+	Modified time.Time
 	Messages []Message
 }
 
@@ -53,7 +54,7 @@ func Scan(root string, since time.Time) ([]Session, error) {
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, runtime.NumCPU())
 
-	for i, path := range files {
+	for i, tf := range files {
 		// Acquired before the goroutine exists, so the number of files bounds
 		// the work in flight rather than the number of goroutines alive.
 		sem <- struct{}{}
@@ -64,7 +65,8 @@ func Scan(root string, since time.Time) ([]Session, error) {
 
 			// A file we cannot read is skipped, not fatal: one unreadable
 			// transcript should not cost the user the whole report.
-			if s, err := readSession(path, since); err == nil {
+			if s, err := readSession(tf.path, since); err == nil {
+				s.Modified = tf.modified
 				sessions[i] = s
 			}
 		}()
@@ -95,8 +97,14 @@ func claimOnce(sessions []Session) []Session {
 		if d := a.start().Compare(b.start()); d != 0 {
 			return d
 		}
-		// Two sessions can share a first timestamp; file path keeps the
-		// attribution stable rather than at the mercy of walk order.
+		// A resume replays the original's turns with their original timestamps,
+		// so both sessions often report the same first message. The original
+		// file was written first, so its mtime breaks the tie meaningfully —
+		// where a UUID filename would decide it by coin flip. Path remains the
+		// last resort so the result is always deterministic.
+		if d := a.Modified.Compare(b.Modified); d != 0 {
+			return d
+		}
 		return strings.Compare(a.File, b.File)
 	})
 
@@ -124,6 +132,9 @@ func claimOnce(sessions []Session) []Session {
 // start is the session's earliest message, which orders sessions by when the
 // conversation began rather than by when its file was written.
 func (s Session) start() time.Time {
+	if len(s.Messages) == 0 {
+		return time.Time{}
+	}
 	first := s.Messages[0].Time
 	for _, m := range s.Messages[1:] {
 		if m.Time.Before(first) {
@@ -137,8 +148,15 @@ func (s Session) start() time.Time {
 // Transcripts are append-only, so a file last modified before the window
 // cannot contain a message inside it — skipping those is what keeps the
 // 30-day mode fast.
-func findTranscripts(root string, since time.Time) ([]string, error) {
-	var files []string
+// transcriptFile is a candidate file and the modification time the walk already
+// had to read, kept so sessions can be ordered without a second stat.
+type transcriptFile struct {
+	path     string
+	modified time.Time
+}
+
+func findTranscripts(root string, since time.Time) ([]transcriptFile, error) {
+	var files []transcriptFile
 	// A directory that cannot be walked is skipped rather than fatal, which
 	// also covers a missing root: the report is simply empty.
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -152,7 +170,7 @@ func findTranscripts(root string, since time.Time) ([]string, error) {
 		if err != nil || info.ModTime().Before(since) {
 			return nil
 		}
-		files = append(files, path)
+		files = append(files, transcriptFile{path, info.ModTime()})
 		return nil
 	})
 	return files, err

@@ -32,7 +32,7 @@ func Resolve(kind string, now, reset time.Time, times []time.Time) (time.Time, e
 		if !reset.IsZero() {
 			return reset.Add(-sessionLen), nil
 		}
-		return inferBlockStart(times, now.Add(-sessionLen)), nil
+		return inferBlockStart(times, now), nil
 	case Week:
 		if !reset.IsZero() {
 			return reset.AddDate(0, 0, -7), nil
@@ -66,9 +66,9 @@ func Lookback(kind string, now time.Time) time.Time {
 // Walking backwards from the newest message instead would report the start of
 // an unbroken run of work, which can be many hours before the block that is
 // actually open.
-func inferBlockStart(times []time.Time, fallback time.Time) time.Time {
+func inferBlockStart(times []time.Time, now time.Time) time.Time {
 	if len(times) == 0 {
-		return fallback
+		return now.Add(-sessionLen)
 	}
 
 	sorted := make([]time.Time, len(times))
@@ -82,12 +82,12 @@ func inferBlockStart(times []time.Time, fallback time.Time) time.Time {
 		}
 	}
 
-	// The last block to open may itself have closed since. Reporting it as the
-	// current window would show work that no longer counts against the live
-	// quota — the current block is simply empty, and fallback (now minus a
-	// session) says so honestly.
-	if start.Before(fallback) {
-		return fallback
+	// The last block to open may itself have closed since. There is then no open
+	// block at all — the next message will start one — so the current window is
+	// empty. Returning the rolling floor instead would sweep in the tail of the
+	// closed block, which is work that no longer counts against the live quota.
+	if !now.Before(start.Add(sessionLen)) {
+		return now
 	}
 	return start
 }

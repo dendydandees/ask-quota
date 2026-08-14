@@ -181,8 +181,9 @@ func TestLookbackFallsBackForUnknownKind(t *testing.T) {
 }
 
 // A block closes five hours after it opens, whether or not anyone is working.
-// If the newest activity predates that close, the current block is empty — the
-// honest answer is the rolling floor, not the last block that happened to open.
+// Once it has, no block is open until the next message starts one, so the
+// current window is empty rather than a rolling five hours that would sweep in
+// the tail of the closed block.
 func TestResolveDoesNotReviveAClosedBlock(t *testing.T) {
 	now := ts(t, "2026-08-14T20:00:00Z")
 	times := []time.Time{
@@ -194,8 +195,8 @@ func TestResolveDoesNotReviveAClosedBlock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if want := now.Add(-5 * time.Hour); !got.Equal(want) {
-		t.Errorf("got %v, want %v — that block closed seven hours ago", got, want)
+	if !got.Equal(now) {
+		t.Errorf("got %v, want %v — that block closed seven hours ago, so no block is open", got, now)
 	}
 }
 
@@ -211,5 +212,22 @@ func TestResolveKeepsABlockThatIsStillOpen(t *testing.T) {
 	}
 	if want := ts(t, "2026-08-14T08:00:00Z"); !got.Equal(want) {
 		t.Errorf("got %v, want %v — the block closes at 13:00, one minute from now", got, want)
+	}
+}
+
+// The tail of a closed block must not leak into the report.
+func TestResolveExcludesTheTailOfAClosedBlock(t *testing.T) {
+	now := ts(t, "2026-08-14T20:00:00Z")
+	times := []time.Time{
+		ts(t, "2026-08-14T14:00:00Z"), // opens a block, closing 19:00
+		ts(t, "2026-08-14T18:30:00Z"), // inside it, and inside a naive now-5h too
+	}
+
+	got, err := Resolve(Session, now, time.Time{}, times)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !times[1].Before(got) {
+		t.Errorf("start %v still includes the 18:30 message, which belongs to the block that closed at 19:00", got)
 	}
 }
