@@ -52,12 +52,12 @@ transcript. Review before proceeding.
 
 ### Phase 2: Correct behaviour
 
-- [ ] Task 5: Window resolution and block inference
-- [ ] Task 6: Optional quota source and the `QUOTA` column
-- [ ] Task 7: Flag parsing, validation and exit codes
-- [ ] Task 8: Grouping by session or project
+- [x] Task 5: Window resolution and block inference
+- [x] Task 6: Optional quota source and the `QUOTA` column
+- [x] Task 7: Flag parsing, validation and exit codes
+- [x] Task 8: Grouping by session or project
 
-**Checkpoint B** — every flag in the spec works, `--json` pipes cleanly into
+**Checkpoint B** ✅ — every flag in the spec works, `--json` pipes cleanly into
 `jq`, and the tool runs correctly on a machine with no quota source present.
 
 ### Phase 3: Ship
