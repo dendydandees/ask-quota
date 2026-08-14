@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -34,13 +35,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, "ask-quota:", err)
 		os.Exit(2)
 	}
-	if err := run(cfg); err != nil {
+	if err := run(cfg, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "ask-quota:", err)
 		os.Exit(2)
 	}
 }
 
-func run(cfg cli.Config) error {
+func run(cfg cli.Config, w io.Writer) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -79,7 +80,7 @@ func run(cfg cli.Config) error {
 
 	sessions := transcript.Since(scanned, start)
 	if len(sessions) == 0 {
-		fmt.Printf("No Claude Code usage found in this %s window (since %s).\n",
+		fmt.Fprintf(w, "No Claude Code usage found in this %s window (since %s).\n",
 			cfg.Window, start.Local().Format(time.RFC3339))
 		return nil
 	}
@@ -98,12 +99,12 @@ func run(cfg cli.Config) error {
 		if err != nil {
 			return err
 		}
-		fmt.Println(string(data))
+		fmt.Fprintln(w, string(data))
 		return nil
 	}
 
-	fmt.Println(windowLine(cfg.Window, start, official, haveOfficial))
-	fmt.Print(report.Table(rows, haveOfficial))
+	fmt.Fprintln(w, windowLine(cfg.Window, start, official, haveOfficial))
+	fmt.Fprint(w, report.Table(rows, haveOfficial))
 	return nil
 }
 

@@ -169,3 +169,13 @@ func TestLookbackReachesBeforeTheWindow(t *testing.T) {
 		t.Errorf("Lookback(30d) = %v, want %v", got, want)
 	}
 }
+
+// An unknown window still has to produce a usable scan floor: Lookback runs
+// before the name is validated for reporting.
+func TestLookbackFallsBackForUnknownKind(t *testing.T) {
+	now := ts(t, "2026-08-14T07:00:00Z")
+
+	if got, want := Lookback("9y", now), now.Add(-24*time.Hour); !got.Equal(want) {
+		t.Errorf("Lookback(9y) = %v, want the 24h floor %v", got, want)
+	}
+}
