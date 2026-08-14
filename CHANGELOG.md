@@ -1,5 +1,43 @@
 # Changelog
 
+## v0.2.0 — 2026-08-14
+
+### Changed
+
+- Official window boundaries are now read in process, from
+  `https://api.anthropic.com/api/oauth/usage`, using the OAuth token Claude Code
+  already stores. The external `quota-axi` command is no longer executed or
+  needed, and Node.js is not involved: nothing beyond the binary has to be
+  installed for the QUOTA column to appear.
+- A run that falls back to a guess now says why on stderr — expired sign-in,
+  rate limit, unreachable network — instead of dropping the QUOTA column
+  silently.
+
+### Security
+
+- Builds are pinned to Go 1.25.13. Speaking TLS put `crypto/tls`, `crypto/x509`
+  and `net/http` on the call path for the first time, and `govulncheck` found 25
+  reachable standard-library vulnerabilities on an older toolchain. CI now runs
+  `make audit` so a stale pin fails the build rather than going unnoticed.
+
+### Fixed
+
+- The 30-day window reported its boundary as `inferred`. It has no upstream
+  equivalent and never asks for one: it is a plain span back from now, exact by
+  definition, and is now labelled `rolling`. The 7-day fallback was mislabelled
+  the same way.
+
+### Added
+
+- `ASK_QUOTA_OFFLINE=1` skips the quota lookup, restoring the property that the
+  tool makes no network calls at all.
+- The quota response is cached for five minutes under `~/.cache/ask-quota`, so
+  a burst of runs costs one request rather than tripping the endpoint's rate
+  limit and degrading to a guess. The file holds no credentials.
+- `make live-update` records the real payload to
+  `internal/quota/testdata/usage-live.json` with volatile values scrubbed. An
+  upstream shape change then shows up as a diff before a release.
+
 ## v0.1.0 — 2026-08-14
 
 First release.

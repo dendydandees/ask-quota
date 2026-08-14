@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,14 +43,16 @@ func TestRunGroupsByProjectBeforeRanking(t *testing.T) {
 	writeSession(t, home, "a2", "/home/u/alpha", "alpha part two", 30)
 	writeSession(t, home, "b1", "/home/u/beta", "beta all at once", 50)
 	t.Setenv("HOME", home)
-	t.Setenv("PATH", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("ASK_QUOTA_OFFLINE", "1")
 
 	cfg, err := cli.Parse([]string{"--group-by", "project", "--top", "2"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := run(cfg, &out); err != nil {
+	if err := run(cfg, &out, io.Discard); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 

@@ -1,4 +1,4 @@
-.TH ASK-QUOTA 1 "2026-08-14" "ask-quota" "User Commands"
+.TH ASK-QUOTA 1 "2026-08-14" "ask-quota 0.2.0" "User Commands"
 .SH NAME
 ask\-quota \- see which tasks consumed your Claude Code quota
 .SH SYNOPSIS
@@ -49,8 +49,10 @@ Print the version and exit.
 Print a short usage summary and exit.
 .SH WINDOWS
 The 5-hour and 7-day windows match the ones the service itself enforces. When
-an external quota source is installed, their boundaries are read from it. When
-none is present,
+the quota lookup succeeds, their boundaries are read from it. When it does not
+\(em an expired sign-in, no network, or
+.B ASK_QUOTA_OFFLINE
+\(em
 .B ask\-quota
 infers the current 5-hour block from the transcripts themselves: a block opens
 on a message and closes five hours later, so the current block begins at the
@@ -59,6 +61,16 @@ this inference landed within nine minutes.
 .PP
 The 30-day window has no upstream equivalent. It is always the last 30 days,
 and it never carries an official percentage.
+.PP
+The first line of a report names the origin of the boundary:
+.B official
+when it came from the API,
+.B inferred
+when the 5-hour block was guessed from the gaps between messages, and
+.B rolling
+for a plain span back from now \(em 30d always, and 7d without a boundary. Only
+.B inferred
+carries uncertainty; a rolling window is exact by definition.
 .SH COLUMNS
 .TP
 .B SHARE
@@ -106,17 +118,33 @@ Output carries the first prompt of each session verbatim, and
 adds the transcript path. Piping that elsewhere sends your own prompt text
 with it.
 .SH ENVIRONMENT
-If an external quota source is installed,
+.TP
+.B ASK_QUOTA_OFFLINE
+When set to any non-empty value, skip the quota lookup entirely and report from
+local transcripts alone.
+.PP
+For official window boundaries,
 .B ask\-quota
-executes
-.B quota\-axi
-from
-.BR $PATH ,
-in a subprocess, to read the official window boundary and percentage used. It
-is passed no data from your transcripts, and the tool works without it.
+issues one request to
+.I https://api.anthropic.com/api/oauth/usage
+authenticated with the OAuth token Claude Code stores in
+.IR ~/.claude/.credentials.json ,
+or under
+.BR $CLAUDE_CONFIG_DIR .
+That is the only request it makes and the only thing it sends: no transcript
+text leaves the machine. The token is read, never written, refreshed or logged,
+and a redirect away from the endpoint is refused rather than followed. The
+answer is cached for five minutes, so repeated runs cost one request. The tool
+works without any of it.
 .SH FILES
 .TP
 .I ~/.claude/projects
 Transcript directory, one subdirectory per working directory.
+.TP
+.I ~/.claude/.credentials.json
+Read-only, for the OAuth token used to ask about the quota window.
+.TP
+.I ~/.cache/ask\-quota/usage.json
+Quota response, cached for five minutes. Holds no credentials; safe to delete.
 .SH SEE ALSO
 .BR jq (1)

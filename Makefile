@@ -3,13 +3,19 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | tr -cd 'A-Za-z0-9.+_-' || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: build test lint install man dist clean
+.PHONY: build test lint install man dist clean audit live-update
 
 build:
 	go build -trimpath -ldflags="$(LDFLAGS)" -o dist/ask-quota ./cmd/ask-quota
 
 test:
-	go test ./...
+	go test -race ./...
+
+live-update:
+	go test -tags=live ./internal/quota/ -run TestLiveGolden -update
+
+audit:
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 lint:
 	go vet ./...

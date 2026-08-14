@@ -2,39 +2,38 @@ package main
 
 import (
 	"bytes"
-	"fmt"
-	"os"
-	"path/filepath"
+	"io"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/dendydandees/ask-quota/internal/cli"
+	"github.com/dendydandees/ask-quota/internal/quota"
 )
 
-// stubQuotaSource puts a quota source on PATH reporting the given percentage
-// for the current 5-hour window.
-func stubQuotaSource(t *testing.T, percentUsed float64) {
+// stubOfficial drives the official branch without a token or a network. The
+// seam is main's own lookupOfficial rather than anything inside the quota
+// package: an override there would have to name the host the bearer token is
+// sent to, and that is not a knob worth having.
+func stubOfficial(t *testing.T, percentUsed float64) {
 	t.Helper()
 
-	bin := t.TempDir()
-	// PATH holds only this directory, so the stub must not reach for a binary
-	// of its own — echo is a shell builtin.
-	script := fmt.Sprintf("#!/bin/sh\necho '"+
-		`{"providers":[{"provider":"claude","windows":[{"id":"five_hour","percentUsed":%v,"resetsAt":%q}]}]}`+
-		"'\n", percentUsed, time.Now().UTC().Add(time.Hour).Format(time.RFC3339))
-	if err := os.WriteFile(filepath.Join(bin, "quota-axi"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
+	original := lookupOfficial
+	t.Cleanup(func() { lookupOfficial = original })
+	lookupOfficial = func(string) (quota.Official, string) {
+		return quota.Official{
+			ResetsAt:    time.Now().Add(time.Hour),
+			PercentUsed: percentUsed,
+		}, ""
 	}
-	t.Setenv("PATH", bin)
 }
 
-// Success Criterion #2: with an official source the report scales local shares
+// Success Criterion #2: with an official figure the report scales local shares
 // into points of the real quota window, and without it the same corpus prints
 // the same rows minus that column. Nothing else runs the official branch, so
 // dropping WithQuota or passing showQuota=false would go unnoticed.
 func TestRunShowsTheQuotaColumnWithAnOfficialSource(t *testing.T) {
-	fakeHome(t, "fix the booking validation", 1234) // also empties PATH
+	fakeHome(t, "fix the booking validation", 1234)
 
 	cfg, err := cli.Parse(nil)
 	if err != nil {
@@ -42,19 +41,19 @@ func TestRunShowsTheQuotaColumnWithAnOfficialSource(t *testing.T) {
 	}
 
 	var without bytes.Buffer
-	if err := run(cfg, &without); err != nil {
-		t.Fatalf("run without source: %v", err)
+	if err := run(cfg, &without, io.Discard); err != nil {
+		t.Fatalf("run without an official figure: %v", err)
 	}
 
-	stubQuotaSource(t, 40) // same HOME, now with a source
+	stubOfficial(t, 40) // same corpus, now with one
 	var with bytes.Buffer
-	if err := run(cfg, &with); err != nil {
-		t.Fatalf("run with source: %v", err)
+	if err := run(cfg, &with, io.Discard); err != nil {
+		t.Fatalf("run with an official figure: %v", err)
 	}
 
 	for _, want := range []string{"QUOTA", "official, 40% used", "fix the booking validation"} {
 		if !strings.Contains(with.String(), want) {
-			t.Errorf("report with a source is missing %q:\n%s", want, with.String())
+			t.Errorf("report with an official figure is missing %q:\n%s", want, with.String())
 		}
 	}
 	// The single session holds the whole window, so it accounts for all 40 points.
@@ -63,9 +62,9 @@ func TestRunShowsTheQuotaColumnWithAnOfficialSource(t *testing.T) {
 	}
 
 	if strings.Contains(without.String(), "QUOTA") {
-		t.Errorf("QUOTA column appeared without a source:\n%s", without.String())
+		t.Errorf("QUOTA column appeared without an official figure:\n%s", without.String())
 	}
 	if !strings.Contains(without.String(), "inferred") {
-		t.Errorf("sourceless report does not mark the window inferred:\n%s", without.String())
+		t.Errorf("report without an official figure does not mark the window inferred:\n%s", without.String())
 	}
 }

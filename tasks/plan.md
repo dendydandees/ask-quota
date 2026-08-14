@@ -89,3 +89,118 @@ Standing bar for every task, on top of its own acceptance criteria:
 
 None. Deferred by decision: other providers, dollar estimates, per-model
 weighting, cross-machine aggregation.
+
+---
+
+# Phase 4: drop the external quota source
+
+Spec: `SPEC.md` (not `docs/spec.md`, which describes the shipped tool).
+
+Replace the `quota-axi` subprocess with an in-process reader, so official
+window boundaries need no Node.js and no second install step. `quota.Lookup`
+keeps its signature throughout: every task below changes only its body, so the
+report, the window resolver and `cmd/` are untouched until Task 15's docs.
+
+Ordered so the network lands last and alone. Tasks 12 and 13 are pure
+functions over bytes — a wrong reset time is the failure that would be
+invisible, so both are fully tested before anything calls them for real.
+
+### ✅ Task 12: Read the OAuth credentials
+
+**Description:** Load Claude Code's stored token from disk. No network.
+
+**Acceptance criteria:**
+- [x] Reads `$CLAUDE_CONFIG_DIR/.credentials.json`, defaulting to `~/.claude`
+- [x] Accepts the token at `claudeAiOauth.accessToken`, or `accessToken` /
+      `access_token` at the top level
+- [x] `expiresAt` is milliseconds; a past value yields no token and a reason
+- [x] An absent `expiresAt` is not treated as expired
+- [x] Missing, unreadable or malformed file yields a reason, never a panic
+- [x] The reason is safe to print: it never contains the token
+
+**Verification:** `go test ./internal/quota/ -run TestCredentials`
+**Dependencies:** none
+**Files:** `internal/quota/credentials.go`, `internal/quota/credentials_test.go`
+**Scope:** S
+
+### ✅ Task 13: Fetch and parse the usage endpoint
+
+**Description:** `GET /api/oauth/usage`, normalise to `Official`. Behind
+`httptest` in tests; no live call ever runs in CI.
+
+**Acceptance criteria:**
+- [x] Prefers the `limits` array (`group: session|weekly`, `percent`,
+      `resets_at`); falls back to `five_hour`/`seven_day` with `utilization`
+- [x] Model-scoped entries are ignored, not mistaken for a window
+- [x] 401/403/429/5xx, malformed JSON and an oversized body each yield
+      `(zero, false)` plus a distinct reason
+- [x] Response body is bounded and the whole call respects an 8s budget
+- [x] Redirects away from `anthropic.com` are refused
+
+**Verification:** `go test ./internal/quota/ -run TestUsage`
+**Dependencies:** Task 12
+**Files:** `internal/quota/usage.go`, `internal/quota/usage_test.go`
+**Scope:** M
+
+### ✅ Task 14: Swap Lookup over and delete the subprocess
+
+**Description:** Wire 12 and 13 into `Lookup`; remove `exec`, `cappedBuffer`
+and `WaitDelay`. Honour `ASK_QUOTA_OFFLINE=1`. Replace the install hint with
+the actual reason a run degraded.
+
+**Acceptance criteria:**
+- [x] `go.mod` still has no requires; `os/exec` no longer imported by `quota`
+- [x] Output is unchanged for every existing test
+- [x] `ASK_QUOTA_OFFLINE=1` sends no request
+- [x] A degraded run names its reason on stderr, never silently
+
+**Verification:** `go test ./...`, then a manual run with the network down
+**Dependencies:** Task 13
+**Files:** `internal/quota/quota.go`, `cmd/ask-quota/main.go`, tests
+**Scope:** M
+
+### ✅ Task 15: Docs and a live parity check
+
+**Description:** Tell the truth in the docs: no external tool, one network
+call. Add the `-tags=live` test that diffs against `quota-axi` while it is
+still installed.
+
+**Acceptance criteria:**
+- [x] `README.md` drops the `npm install -g quota-axi` section and states the
+      network call and `ASK_QUOTA_OFFLINE`
+- [x] `man/ask-quota.1` ENVIRONMENT rewritten; `CHANGELOG.md` entry added
+- [x] `-tags=live` parity test exists and is excluded from CI
+
+**Dependencies:** Task 14
+**Files:** `README.md`, `man/ask-quota.1`, `CHANGELOG.md`, `.github/`
+**Scope:** S
+
+### ✅ Task 16: Cache the response briefly
+
+**Description:** Found while running Task 15's parity check: the endpoint rate
+limits quickly, and ask-quota now calls it on every run where the subprocess
+used to serve a cached answer. Repeated runs would degrade to `inferred` —
+exactly the failure this phase set out to remove.
+
+One GET returns every window, so the cache is keyed by nothing: a single
+payload serves `5h` and `week` alike.
+
+**Acceptance criteria:**
+- [x] A second lookup within the TTL sends no request
+- [x] A lookup after the TTL sends a fresh one
+- [x] One cached payload answers both `5h` and `week`
+- [x] An unreadable, corrupt or unwritable cache never fails a run
+- [x] Only a payload that parsed is cached
+- [x] The cache file never contains the token, and is written 0600
+
+**Verification:** `go test ./internal/quota/ -run TestCache`
+**Dependencies:** Task 14
+**Files:** `internal/quota/cache.go`, `internal/quota/cache_test.go`,
+`internal/quota/usage.go`
+**Scope:** S
+
+### ✅ Checkpoint D
+
+- [x] `quota-axi` uninstalled; `5h` and `week` still report `official`
+- [x] `go vet ./...` clean, `gofmt -l .` empty, `go.mod` still bare
+- [x] The access token appears in no output stream

@@ -1,149 +1,84 @@
 package quota
 
 import (
+	"net/http"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/dendydandees/ask-quota/internal/window"
 )
 
-// The quota source is optional by design. Every way it can go wrong must read
-// as "absent", never as an error the user has to deal with.
-func TestLookupTreatsEveryFailureAsAbsent(t *testing.T) {
-	original := quotaSource
-	t.Cleanup(func() { quotaSource = original })
+// refuseAnyRequest fails the test if the network is touched at all.
+func refuseAnyRequest(t *testing.T) {
+	t.Helper()
+	serveUsage(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("a request was sent when none should have been")
+	})
+}
 
-	cases := []struct {
-		name    string
-		command []string
-	}{
-		{"binary not installed", []string{"ask-quota-no-such-command-exists"}},
-		{"source exits non-zero", []string{"false"}},
-		{"source prints junk", []string{"echo", "not json"}},
-		{"source prints an unrelated window", []string{"echo", `{"providers":[{"windows":[{"id":"model:fable","percentUsed":7}]}]}`}},
+func TestLookupReadsAWorkingWindow(t *testing.T) {
+	writeCredentials(t, `{"claudeAiOauth":{"accessToken":"sk-tok"}}`)
+	serveUsage(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(liveLimits))
+	})
+
+	got, reason := Lookup(window.Session)
+	if reason != "" {
+		t.Fatalf("reason = %q, want the window found", reason)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			quotaSource = tc.command
-			if _, ok := Lookup(window.Session); ok {
-				t.Error("reported success, want a clean absence")
-			}
-		})
+	if got.PercentUsed != 7 || got.ResetsAt.IsZero() {
+		t.Errorf("Lookup = %+v, want 7%% used and a real reset", got)
 	}
 }
 
-func TestLookupReadsAWorkingSource(t *testing.T) {
-	original := quotaSource
-	t.Cleanup(func() { quotaSource = original })
+// There is no 30-day window upstream, so nothing should go out on the wire for
+// one — not a slow path, a bug.
+func TestLookupNeverAsksAboutTheMonthlyWindow(t *testing.T) {
+	writeCredentials(t, `{"claudeAiOauth":{"accessToken":"sk-tok"}}`)
+	refuseAnyRequest(t)
 
-	quotaSource = []string{"echo", sample}
-	got, ok := Lookup(window.Session)
-	if !ok {
-		t.Fatal("want the window to be found")
-	}
-	if got.PercentUsed != 51 {
-		t.Errorf("PercentUsed = %v, want 51", got.PercentUsed)
+	if _, reason := Lookup(window.Month); reason == "" {
+		t.Error("30d was reported as official")
 	}
 }
 
-// There is no 30-day window upstream, so the source is never even consulted.
-func TestLookupSkipsTheSourceForMonth(t *testing.T) {
-	original := quotaSource
-	t.Cleanup(func() { quotaSource = original })
+// The tool made no network calls at all before this; the switch gives that
+// back to anyone who wants it.
+func TestLookupHonoursTheOfflineSwitch(t *testing.T) {
+	writeCredentials(t, `{"claudeAiOauth":{"accessToken":"sk-tok"}}`)
+	refuseAnyRequest(t)
+	t.Setenv(offlineEnv, "1")
 
-	quotaSource = []string{"ask-quota-this-would-fail-if-run"}
-	if _, ok := Lookup(window.Month); ok {
-		t.Error("want no official window for 30d")
+	_, reason := Lookup(window.Session)
+	if !strings.Contains(reason, offlineEnv) {
+		t.Errorf("reason = %q, want it to name the switch", reason)
 	}
 }
 
-const sample = `{"providers":[{"provider":"claude","windows":[
-  {"id":"five_hour","percentUsed":51,"resetsAt":"2026-08-14T09:20:00.388297+00:00"},
-  {"id":"seven_day","percentUsed":57,"resetsAt":"2026-08-16T05:59:59.906805+00:00"},
-  {"id":"model:fable","percentUsed":7,"resetsAt":"2026-08-16T05:59:59.907168+00:00"}]}]}`
+// Credentials are read before the request, so an unusable token costs no
+// timeout and reports the one cause the user can actually fix.
+func TestLookupStopsBeforeTheNetworkWithoutCredentials(t *testing.T) {
+	writeCredentials(t, "")
+	refuseAnyRequest(t)
 
-func TestParseReadsTheMatchingWindow(t *testing.T) {
-	got, ok := parse([]byte(sample), window.Session)
-	if !ok {
-		t.Fatal("want the five_hour window to be found")
-	}
-	if got.PercentUsed != 51 {
-		t.Errorf("PercentUsed = %v, want 51", got.PercentUsed)
-	}
-	if got.ResetsAt.IsZero() {
-		t.Error("ResetsAt was not parsed")
-	}
-
-	week, ok := parse([]byte(sample), window.Week)
-	if !ok || week.PercentUsed != 57 {
-		t.Errorf("week = %+v, ok = %v, want 57", week, ok)
+	if _, reason := Lookup(window.Session); reason == "" {
+		t.Error("a lookup without credentials was reported as official")
 	}
 }
 
-// No 30-day window exists upstream, so there is nothing to match.
-func TestParseHasNoMonthWindow(t *testing.T) {
-	if _, ok := parse([]byte(sample), window.Month); ok {
-		t.Error("want no official window for 30d")
-	}
-}
+// Whatever went wrong, the reason is shown to the user, so it must never carry
+// the token that caused it.
+func TestLookupKeepsTheTokenOutOfEveryReason(t *testing.T) {
+	writeCredentials(t, `{"claudeAiOauth":{"accessToken":"sk-secret"}}`)
 
-func TestParseToleratesJunk(t *testing.T) {
-	for _, in := range []string{"", "not json", `{"providers":[]}`, `{"providers":[{"windows":[]}]}`} {
-		if _, ok := parse([]byte(in), window.Session); ok {
-			t.Errorf("parse(%q) reported success, want a clean miss", in)
+	for _, h := range []http.HandlerFunc{
+		func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(401) },
+		func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(429) },
+		func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("junk")) },
+	} {
+		serveUsage(t, h)
+		if _, reason := Lookup(window.Session); strings.Contains(reason, "sk-secret") {
+			t.Errorf("reason leaks the token: %q", reason)
 		}
-	}
-}
-
-// A source that forks leaves a descendant holding the stdout pipe, so killing
-// the child is not enough — Wait would block forever and take the whole program
-// with it. The contract is that a slow source is simply absent.
-func TestLookupDoesNotHangOnAForkingSource(t *testing.T) {
-	original := quotaSource
-	t.Cleanup(func() { quotaSource = original })
-
-	lookupTimeout = 200 * time.Millisecond
-	t.Cleanup(func() { lookupTimeout = 8 * time.Second })
-
-	// /bin/sh forks rather than execs, so `sleep` survives the kill.
-	quotaSource = []string{"/bin/sh", "-c", "sleep 60 & exit 0"}
-
-	// The result is carried back rather than asserted in the goroutine: on the
-	// failure path the goroutine outlives the test, and touching t from it would
-	// replace the real message with a harness error.
-	result := make(chan bool, 1)
-	go func() { _, ok := Lookup("5h"); result <- ok }()
-
-	select {
-	case ok := <-result:
-		if ok {
-			t.Error("a forking source reported success")
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("Lookup hung: the timeout does not cover a descendant holding stdout")
-	}
-}
-
-// A runaway source must not keep the tool waiting. The ceiling itself is
-// asserted in capped_test.go — this only pins that Lookup returns at all.
-func TestLookupReturnsForAnEndlessSource(t *testing.T) {
-	original := quotaSource
-	t.Cleanup(func() { quotaSource = original })
-
-	lookupTimeout = 200 * time.Millisecond
-	t.Cleanup(func() { lookupTimeout = 8 * time.Second })
-
-	quotaSource = []string{"/bin/sh", "-c", "exec yes '{\"providers\":[]}'"}
-
-	result := make(chan bool, 1)
-	go func() { _, ok := Lookup("5h"); result <- ok }()
-
-	select {
-	case ok := <-result:
-		if ok {
-			t.Error("an endless source reported success")
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("Lookup did not stop reading an endless source")
 	}
 }

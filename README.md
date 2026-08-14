@@ -36,8 +36,29 @@ sha256sum -c checksums.txt --ignore-missing
 
 From a clone, `make install` also places the man page under `~/.local/share/man`.
 
-No runtime, no dependencies: a single static binary, Go standard library only.
-Linux is the supported target.
+No runtime, no dependencies, nothing else to install: a single static binary,
+Go standard library only. Linux is the supported target.
+
+Build with **Go 1.25.13 or newer**. `ask-quota` speaks TLS, so `crypto/tls`,
+`crypto/x509` and `net/http` are on its call path and an older toolchain bakes
+their known vulnerabilities into the binary. Released binaries are built at the
+pinned version; `go install` uses whatever toolchain you have, so check
+`go version` first. `make audit` runs `govulncheck` against your build.
+
+### The one network call
+
+For official window boundaries and the QUOTA column, `ask-quota` asks
+`api.anthropic.com` about your quota, authenticating with the token Claude Code
+already stores in `~/.claude/.credentials.json`. That is the only request it
+makes, and the only thing it sends: no transcript text ever leaves the machine.
+The token is read, never written, refreshed or logged.
+
+The answer is cached for five minutes under `~/.cache/ask-quota`, so a burst of
+runs costs one request — the endpoint rate limits, and being limited means
+falling back to a guess.
+
+`ASK_QUOTA_OFFLINE=1` skips the call entirely. The report still ranks your
+sessions from local data — see [Windows](#windows) for exactly what changes.
 
 ## Use
 
@@ -67,8 +88,9 @@ ranks; it does not price, and it ignores differences between models.
 
 ## Windows
 
-The 5-hour and 7-day windows mirror the ones the service enforces. If a quota
-source is installed, boundaries come from it. If not, `ask-quota` infers the
+The 5-hour and 7-day windows mirror the ones the service enforces. When the
+quota lookup succeeds, boundaries come from it. When it does not — expired
+sign-in, no network, `ASK_QUOTA_OFFLINE=1` — `ask-quota` infers the
 current 5-hour block from the transcripts themselves: a block opens on a
 message and closes five hours later, so the current one begins at the first
 message after the previous closed. Against a live window that inference landed
@@ -76,6 +98,26 @@ within nine minutes.
 
 The 30-day window has no upstream equivalent, so it is always the last 30 days
 and never carries a QUOTA column.
+
+The first line of every report says which of the three it was:
+
+| | |
+|---|---|
+| `official` | the boundary came from the API, with the percentage used |
+| `inferred` | the 5-hour block was guessed from the gaps between messages |
+| `rolling`  | a plain span back from now — 30d always, and 7d without a boundary |
+
+Only `inferred` carries uncertainty. A `rolling` window is exact by definition.
+
+A run that falls back says why on stderr, so a missing QUOTA column is never a
+silent mystery:
+
+```
+$ ask-quota
+window 5h: since 2026-08-14T21:58:07+07:00 (inferred)
+...
+ask-quota: Claude Code sign-in has expired; run claude once to renew it
+```
 
 ## Limitation worth knowing
 
