@@ -4,6 +4,7 @@ package transcript
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"io/fs"
 	"os"
@@ -130,65 +131,74 @@ func readSession(path string, since time.Time) (Session, error) {
 	s := Session{File: path}
 	seen := make(map[string]bool)
 
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), maxLine)
-	for sc.Scan() {
-		line := sc.Bytes()
+	// A Scanner would be simpler, but it stops dead on a line larger than its
+	// buffer and takes the rest of the file with it. Transcripts can carry a
+	// pasted image on one line, so lines are read without a fixed ceiling.
+	br := bufio.NewReaderSize(f, 64*1024)
+	for {
+		line, readErr := br.ReadBytes('\n')
 
-		// Most lines are user turns and tool results. Rejecting them on a
-		// substring before unmarshalling avoids the dominant cost.
-		wantUsage := strings.Contains(string(line), `"usage"`)
-		if !wantUsage && s.Label != "" {
-			continue
+		if len(line) > 0 {
+			readLine(line, since, &s, seen)
 		}
-
-		var r record
-		// A malformed line is skipped: the last line of an active transcript
-		// is often mid-write.
-		if json.Unmarshal(line, &r) != nil {
-			continue
+		if readErr != nil {
+			break
 		}
-
-		if s.Label == "" && r.Type == "user" && !r.IsMeta {
-			if text := promptText(r.Message.Content); text != "" {
-				s.Label = text
-			}
-		}
-
-		if r.Message.Usage == nil || r.Type != "assistant" {
-			continue
-		}
-		if r.Timestamp.Before(since) {
-			continue
-		}
-		// Every assistant message is written ~3x per transcript; counting each
-		// copy would inflate every number in the tool by ~3x.
-		if r.Message.ID != "" {
-			if seen[r.Message.ID] {
-				continue
-			}
-			seen[r.Message.ID] = true
-		}
-		if s.CWD == "" {
-			s.CWD = r.CWD
-		}
-		s.Messages = append(s.Messages, Message{
-			ID:   r.Message.ID,
-			Time: r.Timestamp,
-			Usage: Usage{
-				Input:      r.Message.Usage.Input,
-				Output:     r.Message.Usage.Output,
-				CacheWrite: r.Message.Usage.CacheWrite,
-				CacheRead:  r.Message.Usage.CacheRead,
-			},
-		})
 	}
 	return s, nil
 }
 
-// maxLine bounds a single transcript line. Lines carry whole assistant turns
-// and can be large; beyond this the line is dropped rather than buffered.
-const maxLine = 8 * 1024 * 1024
+// readLine folds one transcript line into s.
+func readLine(line []byte, since time.Time, s *Session, seen map[string]bool) {
+	// Most lines are user turns and tool results. Rejecting them on a
+	// substring before unmarshalling avoids the dominant cost, and matching on
+	// []byte directly avoids copying the line to do it.
+	needLabel := s.Label == ""
+	if !needLabel && !bytes.Contains(line, usageKey) {
+		return
+	}
+
+	var r record
+	// A malformed line is skipped: the last line of an active transcript is
+	// often mid-write.
+	if json.Unmarshal(line, &r) != nil {
+		return
+	}
+
+	if needLabel && r.Type == "user" && !r.IsMeta {
+		if text := promptText(r.Message.Content); text != "" {
+			s.Label = text
+		}
+	}
+
+	if r.Message.Usage == nil || r.Type != "assistant" || r.Timestamp.Before(since) {
+		return
+	}
+	// Every assistant message is written ~3x per transcript; counting each copy
+	// would inflate every number in the tool by ~3x.
+	if r.Message.ID != "" {
+		if seen[r.Message.ID] {
+			return
+		}
+		seen[r.Message.ID] = true
+	}
+	if s.CWD == "" {
+		s.CWD = r.CWD
+	}
+	s.Messages = append(s.Messages, Message{
+		ID:   r.Message.ID,
+		Time: r.Timestamp,
+		Usage: Usage{
+			Input:      r.Message.Usage.Input,
+			Output:     r.Message.Usage.Output,
+			CacheWrite: r.Message.Usage.CacheWrite,
+			CacheRead:  r.Message.Usage.CacheRead,
+		},
+	})
+}
+
+// usageKey is the marker that tells a quota-consuming line from the rest.
+var usageKey = []byte(`"usage"`)
 
 // skipPrefixes mark user lines that are machinery rather than something the
 // user typed. Every wrapper the harness injects — slash commands, hooks, task
