@@ -1,0 +1,105 @@
+.TH ASK-QUOTA 1 "2026-08-14" "ask-quota" "User Commands"
+.SH NAME
+ask\-quota \- see which tasks consumed your Claude Code quota
+.SH SYNOPSIS
+.B ask\-quota
+.RI [ window ]
+.RI [ options ]
+.SH DESCRIPTION
+.B ask\-quota
+reads the Claude Code transcripts stored under
+.I ~/.claude/projects
+and reports which sessions consumed the current quota window.
+.PP
+Quota tools report how much is left. This one reports where it went.
+.PP
+Rows are ranked by a cost weight derived from published price ratios: cache
+reads count for a tenth of an input token, cache writes for one and a quarter,
+and output tokens for five. The weight is a ranking device, not a price: it
+deliberately ignores the differences between models.
+.SH OPTIONS
+.TP
+.BI \-\-window " name"
+Window to report on:
+.BR 5h " (default), " week ", or " 30d .
+May also be given as the first positional argument, so
+.B ask\-quota week
+works.
+.TP
+.BI \-\-top " n"
+How many rows to show. Accepts a positive number or
+.BR all .
+Default is 5.
+.TP
+.BI \-\-group\-by " mode"
+.B session
+(default) shows one row per session.
+.B project
+merges every session that ran in the same directory, which is how one feature
+worked across several repositories reads as a single number.
+.TP
+.B \-\-json
+Print rows as a JSON array for piping. No header line, no formatting: token
+counts are exact rather than abbreviated.
+.TP
+.B \-\-version
+Print the version and exit.
+.TP
+.B \-\-help
+Print a short usage summary and exit.
+.SH WINDOWS
+The 5-hour and 7-day windows match the ones the service itself enforces. When
+an external quota source is installed, their boundaries are read from it. When
+none is present,
+.B ask\-quota
+infers the current 5-hour block from the transcripts themselves: a block opens
+on a message and closes five hours later, so the current block begins at the
+first message after the previous one closed. Measured against a live window,
+this inference landed within nine minutes.
+.PP
+The 30-day window has no upstream equivalent. It is always the last 30 days,
+and it never carries an official percentage.
+.SH COLUMNS
+.TP
+.B SHARE
+This row's percentage of the window's total cost. Fully measured from local
+data; shares always sum to 100%.
+.TP
+.B QUOTA
+SHARE scaled by the officially reported percentage used, estimating how many
+points of the real quota window this row accounts for. This is a proportion,
+not a measurement, and it appears only when an official figure is available.
+.TP
+.BR OUT ", " CACHE_W ", " CACHE_R
+Output, cache-write and cache-read tokens, abbreviated.
+.SH EXAMPLES
+.TP
+.B ask\-quota
+The top five sessions of the current 5-hour block.
+.TP
+.B ask\-quota week \-\-group\-by project
+Which repositories consumed this week's quota.
+.TP
+.B ask\-quota 30d \-\-top all \-\-json | jq
+Every session of the last 30 days, machine-readable.
+.SH EXIT STATUS
+.TP
+.B 0
+Success, including the case where no usage was found.
+.TP
+.B 2
+Invalid arguments.
+.SH LIMITATIONS
+Only transcripts on this machine are visible. Sessions run on another machine,
+in the web application, or by cloud agents consume the same quota but leave no
+local trace, so they cannot appear in this report. A number here is therefore a
+breakdown of local work, not necessarily of everything the account consumed.
+.PP
+The cost weight ignores per-model price differences, so rows are ranked
+consistently but not priced.
+.SH FILES
+.TP
+.I ~/.claude/projects
+Transcript directory, one subdirectory per working directory.
+.SH SEE ALSO
+.BR jq (1)

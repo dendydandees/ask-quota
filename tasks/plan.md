@@ -62,7 +62,8 @@ transcript. Review before proceeding.
 
 ### Phase 3: Ship
 
-- [ ] Task 9: Performance verification on the real corpus
+- [x] Task 9: Performance verification on the real corpus — 531 files / 663 MB:
+      `30d --top all` in 551–740ms against a 5s target, no code changed
 - [ ] Task 10: `--help` text and man page
 - [ ] Task 11: Release scaffolding
 

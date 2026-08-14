@@ -18,9 +18,15 @@ import (
 var version = "dev"
 
 func main() {
-	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
-		fmt.Printf("ask-quota %s\n", version)
-		return
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--version", "-v":
+			fmt.Printf("ask-quota %s\n", version)
+			return
+		case "--help", "-h", "help":
+			fmt.Print(cli.Usage)
+			return
+		}
 	}
 
 	cfg, err := cli.Parse(os.Args[1:])
