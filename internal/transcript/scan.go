@@ -224,10 +224,14 @@ func readSession(path string, since time.Time) (Session, error) {
 	return s, nil
 }
 
-// maxLine bounds one line. A pasted image fits comfortably; a runaway line does
-// not. Without a ceiling one line is one allocation of its full size, several
-// times over once decoded, on every file being read concurrently.
-const maxLine = 32 << 20
+// maxLine bounds one line. The largest line in a real 660 MB corpus was under
+// 1 MB, so this leaves an order of magnitude for a pasted image while keeping a
+// runaway line cheap to discard.
+//
+// The real ceiling is higher than it reads: append overshoots by up to 2x, and
+// NumCPU files are read at once. At 8 MiB that is ~128 MiB on an 8-core box;
+// at 32 MiB it was over half a gigabyte.
+const maxLine = 8 << 20
 
 // readCappedLine returns the next line, or nil for a line past maxLine, having
 // consumed it either way. Dropping one oversized line keeps the rest of the
