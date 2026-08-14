@@ -2,6 +2,7 @@ package quota
 
 import (
 	"testing"
+	"time"
 
 	"github.com/dendy-fisiohome/ask-quota/internal/window"
 )
@@ -91,5 +92,58 @@ func TestParseToleratesJunk(t *testing.T) {
 		if _, ok := parse([]byte(in), window.Session); ok {
 			t.Errorf("parse(%q) reported success, want a clean miss", in)
 		}
+	}
+}
+
+// A source that forks leaves a descendant holding the stdout pipe, so killing
+// the child is not enough — Wait would block forever and take the whole program
+// with it. The contract is that a slow source is simply absent.
+func TestLookupDoesNotHangOnAForkingSource(t *testing.T) {
+	original := quotaSource
+	t.Cleanup(func() { quotaSource = original })
+
+	lookupTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { lookupTimeout = 8 * time.Second })
+
+	// /bin/sh forks rather than execs, so `sleep` survives the kill.
+	quotaSource = []string{"/bin/sh", "-c", "sleep 60 & exit 0"}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, ok := Lookup("5h"); ok {
+			t.Error("a forking source reported success")
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Lookup hung: the timeout does not cover a descendant holding stdout")
+	}
+}
+
+// A runaway source must not be read into memory without a ceiling.
+func TestLookupBoundsTheOutputItReads(t *testing.T) {
+	original := quotaSource
+	t.Cleanup(func() { quotaSource = original })
+
+	lookupTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { lookupTimeout = 8 * time.Second })
+
+	quotaSource = []string{"/bin/sh", "-c", "exec yes '{\"providers\":[]}'"}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, ok := Lookup("5h"); ok {
+			t.Error("an endless source reported success")
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Lookup did not stop reading an endless source")
 	}
 }

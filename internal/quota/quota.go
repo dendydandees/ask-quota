@@ -29,6 +29,27 @@ var officialWindowID = map[string]string{
 // scale them to the real window.
 var quotaSource = []string{"quota-axi", "--provider", "claude", "--json"}
 
+// lookupTimeout is generous because the lookup runs alongside the scan, so its
+// latency costs no wall clock. A variable so tests need not wait it out.
+var lookupTimeout = 8 * time.Second
+
+// maxOutput bounds what the source may print, ~1000x the real payload.
+const maxOutput = 1 << 20
+
+// cappedBuffer collects at most maxOutput bytes and silently discards the rest,
+// so an endless source neither grows memory nor stalls the writer.
+type cappedBuffer struct{ data []byte }
+
+func (b *cappedBuffer) Write(p []byte) (int, error) {
+	if room := maxOutput - len(b.data); room > 0 {
+		if len(p) < room {
+			room = len(p)
+		}
+		b.data = append(b.data, p[:room]...)
+	}
+	return len(p), nil
+}
+
 // Lookup asks the optional quota source about a window. A missing,
 // failing or slow source is simply absent: it must never turn into an error
 // the user has to deal with.
@@ -37,14 +58,25 @@ func Lookup(kind string) (Official, bool) {
 		return Official{}, false
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), lookupTimeout)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, quotaSource[0], quotaSource[1:]...).Output()
-	if err != nil {
+	cmd := exec.CommandContext(ctx, quotaSource[0], quotaSource[1:]...)
+	// The context kills the child, but Wait blocks until every writer of the
+	// stdout pipe closes it — a source that forks (any shell wrapper does) would
+	// otherwise hang this call, and with it the whole program.
+	cmd.WaitDelay = time.Second
+
+	// Writing into a capped buffer rather than reading a StdoutPipe is what
+	// makes WaitDelay effective: os/exec then owns the pipe and can force it
+	// closed. It also bounds memory — the real payload is a few hundred bytes,
+	// and a runaway source must not fill memory before the timeout fires.
+	var buf cappedBuffer
+	cmd.Stdout = &buf
+	if err := cmd.Run(); err != nil {
 		return Official{}, false
 	}
-	return parse(out, kind)
+	return parse(buf.data, kind)
 }
 
 func parse(data []byte, kind string) (Official, bool) {

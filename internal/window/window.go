@@ -81,5 +81,13 @@ func inferBlockStart(times []time.Time, fallback time.Time) time.Time {
 			start = t
 		}
 	}
+
+	// The last block to open may itself have closed since. Reporting it as the
+	// current window would show work that no longer counts against the live
+	// quota — the current block is simply empty, and fallback (now minus a
+	// session) says so honestly.
+	if start.Before(fallback) {
+		return fallback
+	}
 	return start
 }

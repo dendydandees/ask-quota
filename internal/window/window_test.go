@@ -179,3 +179,37 @@ func TestLookbackFallsBackForUnknownKind(t *testing.T) {
 		t.Errorf("Lookback(9y) = %v, want the 24h floor %v", got, want)
 	}
 }
+
+// A block closes five hours after it opens, whether or not anyone is working.
+// If the newest activity predates that close, the current block is empty — the
+// honest answer is the rolling floor, not the last block that happened to open.
+func TestResolveDoesNotReviveAClosedBlock(t *testing.T) {
+	now := ts(t, "2026-08-14T20:00:00Z")
+	times := []time.Time{
+		ts(t, "2026-08-14T08:00:00Z"), // opened a block that closed at 13:00
+		ts(t, "2026-08-14T09:00:00Z"),
+	}
+
+	got, err := Resolve(Session, now, time.Time{}, times)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if want := now.Add(-5 * time.Hour); !got.Equal(want) {
+		t.Errorf("got %v, want %v — that block closed seven hours ago", got, want)
+	}
+}
+
+// The boundary case: activity exactly at the edge of the open block still
+// counts, so a block is not declared dead one instant early.
+func TestResolveKeepsABlockThatIsStillOpen(t *testing.T) {
+	now := ts(t, "2026-08-14T12:59:00Z")
+	times := []time.Time{ts(t, "2026-08-14T08:00:00Z")}
+
+	got, err := Resolve(Session, now, time.Time{}, times)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if want := ts(t, "2026-08-14T08:00:00Z"); !got.Equal(want) {
+		t.Errorf("got %v, want %v — the block closes at 13:00, one minute from now", got, want)
+	}
+}

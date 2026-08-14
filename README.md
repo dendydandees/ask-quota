@@ -49,7 +49,8 @@ See `ask-quota --help` for every flag, or `man ask-quota` for the full page.
 ## Reading the numbers
 
 **SHARE** is this row's percentage of the window's total, measured entirely
-from local data. Shares always sum to 100%.
+from local data. Shares are computed across every session in the window, so the
+rows shown — the top N — sum to less than 100%.
 
 **QUOTA** is SHARE scaled by the officially reported percentage used, so it
 estimates points of the real quota window. It is a proportion, not a

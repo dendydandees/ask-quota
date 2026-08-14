@@ -190,10 +190,11 @@ func readSession(path string, since time.Time) (Session, error) {
 
 	// A Scanner would be simpler, but it stops dead on a line larger than its
 	// buffer and takes the rest of the file with it. Transcripts can carry a
-	// pasted image on one line, so lines are read without a fixed ceiling.
+	// pasted image on one line, so oversized lines are skipped individually and
+	// reading continues.
 	br := bufio.NewReaderSize(f, 64*1024)
 	for {
-		line, readErr := br.ReadBytes('\n')
+		line, readErr := readCappedLine(br)
 
 		if len(line) > 0 {
 			readLine(line, since, &s, seen)
@@ -203,6 +204,34 @@ func readSession(path string, since time.Time) (Session, error) {
 		}
 	}
 	return s, nil
+}
+
+// maxLine bounds one line. A pasted image fits comfortably; a runaway line does
+// not. Without a ceiling one line is one allocation of its full size, several
+// times over once decoded, on every file being read concurrently.
+const maxLine = 32 << 20
+
+// readCappedLine returns the next line, or nil for a line past maxLine, having
+// consumed it either way. Dropping one oversized line keeps the rest of the
+// file readable, which a fixed-buffer Scanner does not.
+func readCappedLine(br *bufio.Reader) ([]byte, error) {
+	var line []byte
+	over := false
+	for {
+		chunk, err := br.ReadSlice('\n')
+		if !over && len(line)+len(chunk) > maxLine {
+			// Past the cap: drop what was collected and stop retaining. The
+			// loop still runs to consume the line, or the next read would
+			// resume in the middle of it.
+			line, over = nil, true
+		}
+		if !over {
+			line = append(line, chunk...)
+		}
+		if err != bufio.ErrBufferFull {
+			return line, err
+		}
+	}
 }
 
 // readLine folds one transcript line into s.

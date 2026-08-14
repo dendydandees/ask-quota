@@ -133,6 +133,7 @@ func shortProject(p string) string {
 	if p == "" {
 		return ""
 	}
+	p = stripControl(p)
 	dir, base := path.Split(p)
 	parent := path.Base(strings.TrimSuffix(dir, "/"))
 	if dir == "" || parent == "." || parent == "/" {
@@ -141,9 +142,23 @@ func shortProject(p string) string {
 	return parent + "/" + base
 }
 
+// stripControl removes C0/C1 control characters and DEL. Transcript text is
+// untrusted — a pasted log can carry escape sequences — and it is printed
+// straight to a terminal, where they would move the cursor or repaint rows.
+// They also break column alignment, since they take width in the count but not
+// on screen.
+func stripControl(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // clean flattens a raw user prompt into one bounded single-line cell.
 func clean(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
+	s = stripControl(strings.Join(strings.Fields(s), " "))
 	if utf8.RuneCountInString(s) > labelWidth {
 		return string([]rune(s)[:labelWidth-1]) + "…"
 	}
