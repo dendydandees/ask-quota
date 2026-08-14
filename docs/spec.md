@@ -137,6 +137,20 @@ Every assistant message appears roughly three times per transcript. Rows must
 be deduplicated by `message.id` before summing. Without this, every number is
 inflated ~3x. This is the single highest-risk defect and requires a test.
 
+Deduplication is **global to the window, not per file**. Resuming or compacting
+a conversation writes a fresh transcript that replays earlier assistant turns
+with their original ids and original timestamps, so the copies land in the same
+window. Measured on a real corpus of 534 files: 926 ids appear in more than one
+file, inflating the 30-day report by 6.1% and the weekly one by 2.4% — and in
+one case a whole row was a strict subset of another, making it entirely phantom.
+
+**A message belongs to the session that saw it first.** Sessions are ordered by
+their earliest message, and a later session that replays an id does not count it
+again. A session left with no messages of its own disappears from the report
+rather than showing as a zero row. Ordering by first message rather than by walk
+order is what makes the attribution deterministic and puts the usage on the
+conversation that originally incurred it.
+
 ### Output
 
 Aligned text table by default. `--json` emits an array of row objects for
