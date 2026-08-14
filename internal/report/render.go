@@ -1,6 +1,7 @@
 package report
 
 import (
+	"encoding/json"
 	"fmt"
 	"path"
 	"sort"
@@ -26,21 +27,31 @@ func Rank(rows []Row, top int) []Row {
 }
 
 // Table renders rows as an aligned text table. It returns "" for no rows.
-func Table(rows []Row) string {
+// The QUOTA column appears only when showQuota is set, since without an
+// official percentage there is nothing honest to put in it.
+func Table(rows []Row, showQuota bool) string {
 	if len(rows) == 0 {
 		return ""
 	}
 
-	grid := [][]string{{"SHARE", "OUT", "CACHE_W", "CACHE_R", "PROJECT", "TASK"}}
+	header := []string{"SHARE", "OUT", "CACHE_W", "CACHE_R", "PROJECT", "TASK"}
+	if showQuota {
+		header = append([]string{"SHARE", "QUOTA"}, header[1:]...)
+	}
+
+	grid := [][]string{header}
 	for _, r := range rows {
-		grid = append(grid, []string{
-			fmt.Sprintf("%.1f%%", r.Share),
+		cells := []string{fmt.Sprintf("%.1f%%", r.Share)}
+		if showQuota {
+			cells = append(cells, fmt.Sprintf("%.1f%%", r.Quota))
+		}
+		grid = append(grid, append(cells,
 			tokens(r.Usage.Output),
 			tokens(r.Usage.CacheWrite),
 			tokens(r.Usage.CacheRead),
 			shortProject(r.Project),
 			clean(r.Label),
-		})
+		))
 	}
 
 	widths := make([]int, len(grid[0]))
@@ -64,6 +75,38 @@ func Table(rows []Row) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// JSON renders rows for piping. It carries no header and no formatting, so
+// the output is consumable as-is.
+func JSON(rows []Row) ([]byte, error) {
+	type jsonRow struct {
+		Share      float64 `json:"share"`
+		Quota      float64 `json:"quota,omitempty"`
+		Project    string  `json:"project"`
+		Task       string  `json:"task"`
+		File       string  `json:"file"`
+		Input      int64   `json:"input_tokens"`
+		Output     int64   `json:"output_tokens"`
+		CacheWrite int64   `json:"cache_write_tokens"`
+		CacheRead  int64   `json:"cache_read_tokens"`
+	}
+
+	out := make([]jsonRow, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, jsonRow{
+			Share:      r.Share,
+			Quota:      r.Quota,
+			Project:    r.Project,
+			Task:       strings.Join(strings.Fields(r.Label), " "),
+			File:       r.File,
+			Input:      r.Usage.Input,
+			Output:     r.Usage.Output,
+			CacheWrite: r.Usage.CacheWrite,
+			CacheRead:  r.Usage.CacheRead,
+		})
+	}
+	return json.Marshal(out)
 }
 
 // tokens formats a token count compactly; exact counts do not aid comparison.

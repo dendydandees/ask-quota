@@ -21,6 +21,10 @@ type Row struct {
 	Cost    float64
 	// Share is this row's percentage of the window's total cost.
 	Share float64
+	// Quota is Share scaled by the official window percentage: an estimate of
+	// how many points of the real quota window this row accounts for. Zero
+	// when no official percentage is available.
+	Quota float64
 }
 
 // Cost returns cost units for a usage record.
