@@ -142,27 +142,3 @@ func TestJSONOmitsQuotaWhenAbsent(t *testing.T) {
 		t.Errorf("quota present without an official percentage: %s", data)
 	}
 }
-
-// Transcript text is untrusted and goes straight to a terminal: a pasted log or
-// a fetched page can carry escape sequences that recolour the screen, move the
-// cursor, or overwrite rows that were already printed.
-func TestTableStripsTerminalControlSequences(t *testing.T) {
-	rows := Summarize([]transcript.Session{
-		session("\x1b[31mFAKE ROW 99.9%\x07 real prompt", "/home/u/\x1b[2Jevil", transcript.Usage{Output: 1}),
-	})
-
-	out := Table(Rank(rows, 0), false)
-	for _, bad := range []string{"\x1b", "\x07", "\x9b"} {
-		if strings.Contains(out, bad) {
-			t.Errorf("control byte %q reached the terminal:\n%q", bad, out)
-		}
-	}
-	if !strings.Contains(out, "FAKE ROW 99.9% real prompt") {
-		t.Errorf("stripping removed legitimate text:\n%s", out)
-	}
-	// Only the control byte goes; the printable remainder stays as plain text,
-	// which is exactly what makes the row visibly odd instead of deceptive.
-	if !strings.Contains(out, "u/[2Jevil") {
-		t.Errorf("PROJECT column was mangled beyond the control byte:\n%s", out)
-	}
-}

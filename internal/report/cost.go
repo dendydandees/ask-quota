@@ -1,7 +1,11 @@
 // Package report turns scanned transcripts into ranked, printable rows.
 package report
 
-import "github.com/dendy-fisiohome/ask-quota/internal/transcript"
+import (
+	"strings"
+
+	"github.com/dendy-fisiohome/ask-quota/internal/transcript"
+)
 
 // Weights are relative to an input token, following published price ratios.
 // Deliberately model-agnostic: this ranks sessions, it does not price them.
@@ -35,6 +39,31 @@ func Cost(u transcript.Usage) float64 {
 		float64(u.CacheRead)*weightCacheRead
 }
 
+// sanitize removes characters that let transcript text misrepresent itself on
+// screen: C0/C1 controls and DEL, which move the cursor, erase lines and repaint
+// rows already read; and the bidirectional overrides, which reorder a label so a
+// row can name a project it did not come from.
+//
+// It runs here, where a session becomes a row, rather than in a renderer: the
+// table escaped it but --json did not, and `--json | jq` decodes the escaping
+// straight back into raw bytes on the way to the terminal. One boundary means a
+// third output format cannot reopen the hole.
+func sanitize(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n', r == '\r', r == '\t':
+			// Whitespace controls become spaces so words stay separated; the
+			// callers collapse runs of them.
+			return ' '
+		case r < 0x20, r == 0x7f, r >= 0x80 && r <= 0x9f:
+			return -1
+		case r >= 0x202a && r <= 0x202e, r >= 0x2066 && r <= 0x2069, r == 0x200e, r == 0x200f:
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // Summarize collapses each session into a row and fills in each row's share of
 // the total.
 func Summarize(sessions []transcript.Session) []Row {
@@ -49,9 +78,9 @@ func Summarize(sessions []transcript.Session) []Row {
 		c := Cost(u)
 		total += c
 		rows = append(rows, Row{
-			Label:   s.Label,
-			Project: s.CWD,
-			File:    s.File,
+			Label:   sanitize(s.Label),
+			Project: sanitize(s.CWD),
+			File:    sanitize(s.File),
 			Usage:   u,
 			Cost:    c,
 		})
