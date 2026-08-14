@@ -41,12 +41,12 @@ Both high-risk tasks land before any polish, because both fail *silently*:
 
 ### Phase 1: Walking skeleton
 
-- [ ] Task 1: Repo scaffold and `--version`
-- [ ] Task 2: Transcript scanner with dedupe and concurrency
-- [ ] Task 3: Cost weighting and share percentages
-- [ ] Task 4: Table output, top N, naive rolling window
+- [x] Task 1: Repo scaffold and `--version`
+- [x] Task 2: Transcript scanner with dedupe and concurrency
+- [x] Task 3: Cost weighting and share percentages
+- [x] Task 4: Table output, top N, naive rolling window
 
-**Checkpoint A** — `go run ./cmd/ask-quota` prints the top 5 sessions of the
+**Checkpoint A** ✅ — `go run ./cmd/ask-quota` prints the top 5 sessions of the
 last 5 hours from the real corpus, and the totals match a hand-audit of one
 transcript. Review before proceeding.
 
